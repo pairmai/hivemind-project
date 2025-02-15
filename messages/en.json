@@ -1,0 +1,40 @@
+{
+    "signup": {
+        "signUp": "Sign Up",
+        "firstName": "First Name",
+        "lastName": "Last Name",
+        "email": "Email Address",
+        "password": "Password",
+        "confirmPassword": "Confirm Password",
+        "createacc": "Create an account",
+        "alreadyacc": "If you already have an account?",
+        "logIn": "Log in",
+        "or": "or",
+        "forgotPassword": "Forgot password?",
+        "donthaveacc": "Don't have an account yet?"
+    },
+    "login": {
+        "signUp": "Sign Up",
+        "email": "Email Address",
+        "password": "Password",
+        "logIn": "Log in",
+        "or": "or",
+        "forgotPassword": "Forgot password?",
+        "donthaveacc": "Don't have an account yet?",
+        "remember": "Remember Me"
+    },
+    "focus": {
+        "mainFocusTitle": "What's your main focus right now?",
+        "mainFocusSubtitle": "Choose a focus to get tailored tools and tips. You can change it later!",
+        "designAndCreativity": "Design & Creativity",
+        "MarketingAndSocialMedia": "Marketing & Social Media",
+        "education": "Education",
+        "it": "IT",
+        "business": "Business",
+        "personalGrowth": "Personal Growth",
+        "finance": "Finance",
+        "explore": "I'm just exploring for now!",
+        "skip": "skip this step",
+        "letsBegin": "Let's Begin!"
+    }
+}
