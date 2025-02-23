@@ -3,15 +3,16 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faGlobe, faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
+import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 import { FcGoogle } from "react-icons/fc";
-import { useTranslations } from "next-intl"; 
+import { useTranslations } from "next-intl";
+import { auth } from "../../../lib/firebase";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 
 export default function SignupPage() {
-
     const router = useRouter();
     const t = useTranslations("signup");
-    // const { language, toggleLanguage } = useLanguage();
+
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState("");
@@ -20,38 +21,39 @@ export default function SignupPage() {
     const [confirmPassword, setConfirmPassword] = useState("");
     const [error, setError] = useState("");
 
-    const handleSignup = (e: React.FormEvent) => {
+    const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
+
         if (password !== confirmPassword) {
             setError("Passwords do not match");
             return;
         }
-        router.push("/focus");
+
+        try {
+            //Firebase Auth create account
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+            console.log("User created:", user);
+
+            //after created redirect to focus page
+            router.push("/focus");
+
+        } catch (error: any) {
+            console.error(error.message);
+            if (error.code === "auth/email-already-in-use") {
+                setError("Email is already in use");
+            } else {
+                setError("An error occurred while creating your account");
+            }
+        }
     };
 
     const handleGoogleSignup = () => {
         console.log("Google Signup Clicked");
-        // TODO: เชื่อม Google OAuth
     };
-
-    // const toggleLanguage = () => {
-    //     const newLanguage = language === "en" ? "th" : "en";
-    //     setLanguage(newLanguage);
-    //     i18n.changeLanguage(newLanguage); // เปลี่ยนภาษา
-    // };
-
 
     return (
         <div className="flex items-center justify-center min-h-screen bg-gray-100">
-
-            {/* <button
-                onClick={toggleLanguage}
-                className="absolute top-4 left-4 flex items-center p-2 bg-white rounded-full shadow-md hover:bg-gray-200 text-sm"
-            >
-                <FontAwesomeIcon icon={faGlobe} className="mr-2 " />
-                <span>{language === "en" ? "English" : "ไทย"}</span>
-            </button> */}
-
             <div className="w-full max-w-sm bg-white p-4 rounded-xl shadow-lg">
                 <img src="/bee-hive.png" alt="Logo" width={64} height={64} className="mx-auto" />
                 <h2 className="text-xl font-bold text-center text-gray-800 mt-4">{t("signUp")}</h2>

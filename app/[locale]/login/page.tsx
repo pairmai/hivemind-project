@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faGlobe, faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
-import { FcGoogle } from "react-icons/fc";
+import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 import { useTranslations } from "next-intl";
-
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "../../../lib/firebase"; // import firebase auth instance
 
 export default function LoginPage() {
     const router = useRouter();
@@ -15,21 +15,41 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [rememberMe, setRememberMe] = useState(false);
+    const [errorMessage, setErrorMessage] = useState("");
 
-    const handleLogin = (e: React.FormEvent) => {
+    // ตรวจสอบ localStorage เมื่อโหลดหน้า
+    useEffect(() => {
+        const savedEmail = localStorage.getItem("email");
+        const savedPassword = localStorage.getItem("password");  //add password
+        const savedRememberMe = localStorage.getItem("rememberMe") === "true";
+        
+        if (savedEmail && savedRememberMe) {
+            setEmail(savedEmail);
+            setPassword(savedPassword || "");  // use localStorage 
+            setRememberMe(savedRememberMe);
+        }
+    }, []);
+
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (email === "newuser@example.com") {
-            router.push("/focus");
-        } else {
-            router.push("/dashboard");
+
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+            if (rememberMe) {
+                localStorage.setItem("email", email);
+                localStorage.setItem("password", password);  // save password
+                localStorage.setItem("rememberMe", "true");
+            } else {
+                localStorage.removeItem("email");
+                localStorage.removeItem("password");  // remove password
+                localStorage.removeItem("rememberMe");
+            }
+            router.push("/dashboard");  
+        } catch (error) {
+            setErrorMessage("Invalid email or password");
+            console.error(error);
         }
     };
-
-    const handleGoogleLogin = () => {
-        console.log("Google Login Clicked");
-        // TODO: เชื่อม Google OAuth
-    };
-
 
     return (
         <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -64,6 +84,10 @@ export default function LoginPage() {
                         </button>
                     </div>
 
+                    {errorMessage && (
+                        <p className="text-red-500 text-sm mt-2">{errorMessage}</p>
+                    )}
+
                     <div className="flex relative items-center mt-5">
                         <input
                             type="checkbox"
@@ -89,22 +113,6 @@ export default function LoginPage() {
                     {t("donthaveacc")}
                     <a href="/signup" className="text-dark-600 underline ml-2">{t("signUp")}</a>
                 </p>
-
-                <div className="relative flex items-center my-4">
-                    <div className="flex-grow border-t border-gray-300"></div>
-                    <span className="px-3 text-gray-500 text-sm">{t("or")}</span>
-                    <div className="flex-grow border-t border-gray-300"></div>
-                </div>
-
-                <div className="mt-4 flex justify-center">
-                    <button
-                        onClick={handleGoogleLogin}
-                        className="w-full flex items-center justify-center gap-2 border border-dark-100 p-2 rounded-lg hover:bg-gray-100"
-                    >
-                        <FcGoogle className="text-xl" />
-                        <span className="text-sm">Continue with Google</span>
-                    </button>
-                </div>
             </div>
         </div>
     );
