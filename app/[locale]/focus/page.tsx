@@ -51,14 +51,14 @@ export default function FocusPage() {
                 className={`mt-8 w-48 py-3 px-6 rounded-lg transition-all mx-auto 
         ${selected.length === 0
                         ? "bg-gray-400 text-gray-300 cursor-not-allowed"
-                        : "bg-dark-600 text-white hover:bg-dark-700"}`}
+                        : "bg-black text-white hover:bg-dark-700"}`}
             >
                 {t("letsBegin")}
             </button>
 
-            <p className="mt-4 text-center text-dark-600">
+            <p className="mt-4 text-center text-black">
                 {t("explore")}
-                <a href="/dashboard" className="text-dark-600 underline ml-2">{t("skip")}</a>
+                <a href="/dashboard" className="text-black underline ml-2">{t("skip")}</a>
             </p>
 
         </div>

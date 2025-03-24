@@ -80,14 +80,14 @@ export default function LoginPage() {
 
                     <button
                         type="submit"
-                        className="w-full mt-5 bg-dark-500 text-white p-2 rounded-lg hover:bg-dark-600 text-base">
+                        className="w-full mt-5 bg-dark-500 text-white p-2 rounded-lg hover:bg-black text-base">
                         {t("logIn")}
                     </button>
                 </form>
 
-                <p className="mt-5 text-center text-dark-600 text-sm">
+                <p className="mt-5 text-center text-black text-sm">
                     {t("donthaveacc")}
-                    <a href="/signup" className="text-dark-600 underline ml-2">{t("signUp")}</a>
+                    <a href="/signup" className="text-black underline ml-2">{t("signUp")}</a>
                 </p>
 
                 <div className="relative flex items-center my-4">

@@ -36,5 +36,31 @@
         "explore": "I'm just exploring for now!",
         "skip": "skip this step",
         "letsBegin": "Let's Begin!"
+    },
+    "dashboard": {
+        "dashboard": "Dashboard",
+        "total": "Total Projects",
+        "notStarted": "Not Started",
+        "inprogress": "In Progress",
+        "completed": "Completed",
+        "delayed": "Delayed",
+        "Name": "Name",
+        "Assigned": "Assigned",
+        "Task": "Task",
+        "Due Date": "Due Date",
+        "progress": "Progress"
+    },
+    "sidebar": {
+        "dashboard": "Dashboard",
+        "taskorganizer": "Task Organizer",
+        "calendar": "My Calendar",
+        "note": "Note-taking",
+        "light": "Light Mode",
+        "dark": "Dark Mode",
+        "settings": "Settings"
+    },
+    "navbar": {
+        "profile": "Profile",
+        "logout": "Logout"
     }
 }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faGlobe, faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
+import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 import { FcGoogle } from "react-icons/fc";
 import { useTranslations } from "next-intl"; 
 
@@ -11,7 +11,6 @@ export default function SignupPage() {
 
     const router = useRouter();
     const t = useTranslations("signup");
-    // const { language, toggleLanguage } = useLanguage();
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState("");
@@ -34,24 +33,9 @@ export default function SignupPage() {
         // TODO: เชื่อม Google OAuth
     };
 
-    // const toggleLanguage = () => {
-    //     const newLanguage = language === "en" ? "th" : "en";
-    //     setLanguage(newLanguage);
-    //     i18n.changeLanguage(newLanguage); // เปลี่ยนภาษา
-    // };
-
 
     return (
         <div className="flex items-center justify-center min-h-screen bg-gray-100">
-
-            {/* <button
-                onClick={toggleLanguage}
-                className="absolute top-4 left-4 flex items-center p-2 bg-white rounded-full shadow-md hover:bg-gray-200 text-sm"
-            >
-                <FontAwesomeIcon icon={faGlobe} className="mr-2 " />
-                <span>{language === "en" ? "English" : "ไทย"}</span>
-            </button> */}
-
             <div className="w-full max-w-sm bg-white p-4 rounded-xl shadow-lg">
                 <img src="/bee-hive.png" alt="Logo" width={64} height={64} className="mx-auto" />
                 <h2 className="text-xl font-bold text-center text-gray-800 mt-4">{t("signUp")}</h2>
@@ -119,14 +103,14 @@ export default function SignupPage() {
 
                     <button
                         type="submit"
-                        className="w-full mt-5 bg-dark-500 text-white p-2 rounded-lg hover:bg-dark-600 text-base">
+                        className="w-full mt-5 bg-dark-500 text-white p-2 rounded-lg hover:bg-black text-base">
                         {t("createacc")}
                     </button>
                 </form>
 
-                <p className="mt-4 text-center text-dark-600 text-sm">
+                <p className="mt-4 text-center text-black text-sm">
                     {t("alreadyacc")}
-                    <a href="/login" className="text-dark-600 underline ml-2">{t("logIn")}</a>
+                    <a href="/login" className="text-black underline ml-2">{t("logIn")}</a>
                 </p>
 
                 <div className="relative flex items-center my-4">
