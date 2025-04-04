@@ -22,7 +22,7 @@ const Navbar: React.FC<{ darkMode: boolean; setDarkMode: (value: boolean) => voi
 
     return (
         <nav className={`fixed top-0 z-50 w-full border-b transition-all duration-300 
-                         ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-black"}`}>
+                         ${darkMode ? "bg-gray-900 border-gray-600 text-white" : "bg-white border-gray-200 text-black"}`}>
             <div className="navbar shadow-sm">
                 <div className="flex-1">
                     <img src="/bee-hive.png" alt="Logo" className="w-8 h-8 ml-4 mr-4" />
