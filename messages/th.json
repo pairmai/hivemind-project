@@ -72,5 +72,26 @@
     "navbar": {
         "profile": "โปรไฟล์",
         "logout": "ออกจากระบบ"
+    },
+    "my_calendar":{
+        "mycalendar": "ปฏิทินของฉัน",
+        "create_task": "สร้างงาน",
+        "edit_task": "แก้ไขงาน",
+        "task": "งาน",
+        "project": "โปรเจกต์",
+        "summary": "สรุป",
+        "priority": "ความสำคัญ",
+        "status": "สถานะ",
+        "description": "คำอธิบาย",
+        "to_do": "ยังไม่ได้ทำ",
+        "doing": "กำลังทำ",
+        "done": "เสร็จสิ้น",
+        "update": "อัพเดท",
+        "cancel": "ยกเลิก",
+        "delete": "ลบ",
+        "confirm_delete": "ยืนยันการลบ",
+        "keep_it": "เก็บไว้",
+        "no_tasks": "ยังไม่มีงาน"
     }
+      
 }

@@ -167,4 +167,4 @@ export default function Dashboard({ darkMode, setDarkMode }: { darkMode: boolean
       </main>
     </div>
   );
-}
+} 

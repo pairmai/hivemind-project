@@ -11,3 +11,186 @@ progress.progress-info::-webkit-progress-value {
 progress.progress-info::-moz-progress-bar {
     background-color: #2C87F2;  
 }
+
+.fc-dayGridMonth-button{
+    background-color: #ffffff !important;
+    border-color: #2C87F2 !important;
+    color: #2C87F2 !important;
+}
+
+.fc-dayGridMonth-button.fc-button-active {
+    background-color: #2C87F2 !important;  
+    border-color: #2C87F2 !important;      
+    color: white !important;              
+}
+
+.fc-dayGridWeek-button{
+    background-color: #ffffff !important;
+    border-color: #2C87F2 !important;
+    color: #2C87F2 !important;
+}
+
+.fc-dayGridWeek-button.fc-button-active {
+    background-color: #2C87F2 !important;  
+    border-color: #2C87F2 !important;      
+    color: white !important;              
+}
+
+.fc-dayGridDay-button{
+    background-color: #ffffff !important;
+    border-color: #2C87F2 !important;
+    color: #2C87F2 !important;
+}
+
+.fc-dayGridDay-button.fc-button-active {
+    background-color: #2C87F2 !important;  
+    border-color: #2C87F2 !important;      
+    color: white !important;              
+}
+
+/* ปรับสีปุ่ม today */
+.fc-today-button {
+    background-color: #2C87F2 !important;
+    border-color: #2C87F2 !important;
+    color: white !important;
+    text-transform: capitalize !important; /* เผื่ออยากให้ 'today' ขึ้นต้นด้วย T */
+  }
+
+.fc-today-button:hover {
+    background-color: white !important; /* เปลี่ยนพื้นหลังเมื่อ hover */
+    color: #2C87F2 !important; /* เปลี่ยนพื้นหลังเมื่อ hover */
+}
+
+.fc-prev-button,
+.fc-next-button {
+    border-radius: 50% !important;
+    border: 1px solid #e4e4e4 !important; /* เพิ่ม solid สำหรับกำหนดกรอบ */
+    width: 40px !important;
+    height: 40px !important;
+    padding: 0 !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    background-color: white !important; /* สีพื้นหลัง */
+  }
+
+  /* เปลี่ยนสีลูกศร */
+.fc-prev-button .fc-icon,
+.fc-next-button .fc-icon {
+  color: #000000 !important;  /* เปลี่ยนสีลูกศรให้เป็นสีดำ */
+}
+
+/* เมื่อ hover เพิ่มสีพื้นหลังและเงา */
+.fc-prev-button:hover,
+.fc-next-button:hover {
+  background-color: #000000 !important; /* เปลี่ยนพื้นหลังเมื่อ hover */
+}
+
+.fc-prev-button:hover .fc-icon,
+.fc-next-button:hover .fc-icon {
+  color: #ffffff !important; /* เปลี่ยนสีลูกศรเป็นสีขาวเมื่อ hover */
+}
+
+
+.fc-prev-button {
+    margin-right: 5px !important; /* เพิ่มระยะห่างทางขวาของปุ่ม Prev */
+  }
+  
+  .fc-next-button {
+    margin-left: 5px !important; /* เพิ่มระยะห่างทางซ้ายของปุ่ม Next */
+  }
+
+  .fc-daygrid-day {
+    cursor: pointer;
+  }
+
+.button-create {
+  width: 100%;
+  background-color: #2c87f2; /* bg-blue-600 */
+  color: white;
+  font-weight: bold; 
+  padding: 0.5rem 1rem; /* py-2 px-4 */
+  border-radius: 0.375rem; /* rounded */
+  transition: background-color 0.1s ease, border-color 0.3s ease;
+}
+
+.button-create:hover {
+  background-color: #1E60D4; /* bg-blue-500 */
+}
+
+.button-create:disabled {
+  opacity: 0.5; /* disabled:opacity-50 */
+  background-color: #2c87f2;
+
+}
+
+.button-cancel{
+  width: 100%;
+  background-color: white;
+  border-style: solid;    /* เพิ่ม border-style เป็น solid */
+  border-width: 2px;      
+  border-color: #2C87F2;
+  color: #2C87F2;
+  font-weight: bold; 
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem; 
+}
+ 
+.my-calendar-title {
+    font-size: 1.5rem; /* 2xl */
+    font-weight: bold;
+    margin-bottom: 1.5rem; /* mb-6 */
+    margin-top: -22px;
+}
+
+.upcoming-board{
+    padding: 1.5rem;
+    background-color: #f4f4f4; /* สีพื้นหลังของ Task Board */
+    overflow-y: auto;
+    height: 100%;
+    border-radius: 16px; /* ขอบมน */
+}
+
+.button-edit{
+    color: black;
+}
+
+.button-delete{
+  color: red;
+}
+
+.todo-event{
+  background-color: #f8d5cf;
+  border-radius: 0.375rem; /* rounded */
+  border:transparent;
+  cursor: pointer;
+}
+
+.doing-event{
+  background-color: #ffe59a;
+  border-radius: 0.375rem; /* rounded */
+  border:transparent;
+  cursor: pointer;
+}
+
+.done-event{
+  background-color: #dfcaf3;
+  border-radius: 0.375rem; /* rounded */
+  border:transparent;
+  cursor: pointer;
+}
+
+.fc-event-title {
+  color: #76584e;
+  font-weight: semibold; 
+}
+
+
+
+
+
+
+
+
+
+
