@@ -82,6 +82,9 @@
         "confirm_delete": "Confirm Delete",
         "keep_it": "Keep it",
         "no_tasks": "No tasks yet"    
+    },
+    "note":{
+        
     }
 
 }

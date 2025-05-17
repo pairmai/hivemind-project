@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 import { FcGoogle } from "react-icons/fc";
-import { useTranslations } from "next-intl"; 
+import { useTranslations } from "next-intl";
+import { auth } from "../../lib/firebase";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 
 export default function SignupPage() {
-
     const router = useRouter();
     const t = useTranslations("signup");
+
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState("");
@@ -19,20 +21,36 @@ export default function SignupPage() {
     const [confirmPassword, setConfirmPassword] = useState("");
     const [error, setError] = useState("");
 
-    const handleSignup = (e: React.FormEvent) => {
+    const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
+
         if (password !== confirmPassword) {
             setError("Passwords do not match");
             return;
         }
-        router.push("/focus");
+
+        try {
+            //Firebase Auth create account
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+            console.log("User created:", user);
+
+            //after created redirect to focus page
+            router.push("/focus");
+
+        } catch (error: any) {
+            console.error(error.message);
+            if (error.code === "auth/email-already-in-use") {
+                setError("Email is already in use");
+            } else {
+                setError("An error occurred while creating your account");
+            }
+        }
     };
 
     const handleGoogleSignup = () => {
         console.log("Google Signup Clicked");
-        // TODO: เชื่อม Google OAuth
     };
-
 
     return (
         <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -103,14 +121,14 @@ export default function SignupPage() {
 
                     <button
                         type="submit"
-                        className="w-full mt-5 bg-dark-500 text-white p-2 rounded-lg hover:bg-black text-base">
+                        className="w-full mt-5 bg-dark-500 text-white p-2 rounded-lg hover:bg-dark-600 text-base">
                         {t("createacc")}
                     </button>
                 </form>
 
-                <p className="mt-4 text-center text-black text-sm">
+                <p className="mt-4 text-center text-dark-600 text-sm">
                     {t("alreadyacc")}
-                    <a href="/login" className="text-black underline ml-2">{t("logIn")}</a>
+                    <a href="/login" className="text-dark-600 underline ml-2">{t("logIn")}</a>
                 </p>
 
                 <div className="relative flex items-center my-4">
