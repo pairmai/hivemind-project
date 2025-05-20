@@ -12,14 +12,13 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
     const hidePaths = ["/login", "/signup", "/focus", "/forgot-password"];
     const shouldHideSidebar = hidePaths.some(path => pathname.includes(path));
     const shouldHideNavbar = hidePaths.some(path => pathname.includes(path));
-    const [darkMode, setDarkMode] = useState(false);
 
     return (
         <div className="flex flex-col min-h-screen">
             {/* Navbar (ซ่อนได้) */}
-            {!shouldHideNavbar && <Navbar darkMode={darkMode} setDarkMode={setDarkMode} />}
+            {!shouldHideNavbar && <Navbar />}
             <div className="flex">
-                {!shouldHideSidebar && <Sidebar darkMode={darkMode} setDarkMode={setDarkMode} />}
+                {!shouldHideSidebar && <Sidebar />}
                 <div className={`flex-1 ${!shouldHideSidebar ? "mt-16 ml-64 p-5" : ""}`}>
                     <LanguageSwitcher />
                     <main>{children}</main>
