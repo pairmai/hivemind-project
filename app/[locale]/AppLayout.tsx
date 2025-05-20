@@ -17,7 +17,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
     return (
         <div className="flex flex-col min-h-screen">
             {/* Navbar (ซ่อนได้) */}
-            {!shouldHideNavbar && <Navbar darkMode={darkMode} setDarkMode={setDarkMode} />}
+            {!shouldHideNavbar && <Navbar setDarkMode={setDarkMode} />}
             <div className="flex">
                 {!shouldHideSidebar && <Sidebar darkMode={darkMode} setDarkMode={setDarkMode} />}
                 <div className={`flex-1 ${!shouldHideSidebar ? "mt-16 ml-64 p-5" : ""}`}>

@@ -1,7 +1,5 @@
-import {NextIntlClientProvider} from 'next-intl';
-import {routing} from '@/i18n/routing';
+import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from "next-intl/server";
-import LanguageSwitcher from "../components/LanguageSwitcher";
 import { notFound } from "next/navigation";
 import { Inter, Prompt } from "next/font/google";
 import AppLayout from './AppLayout';
@@ -10,6 +8,9 @@ import "../globals.css";
 import "@fortawesome/fontawesome-svg-core/styles.css";
 import { config } from "@fortawesome/fontawesome-svg-core";
 config.autoAddCss = false;
+
+// 👇 import UserProvider ที่เราสร้างไว้
+import { UsersProvider } from "../context/UserContext";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -41,7 +42,9 @@ export default async function RootLayout({
     <html lang={locale}>
       <body className={inter.className}>
         <NextIntlClientProvider locale={locale} messages={messages}>
-          <AppLayout>{children}</AppLayout> 
+          <UsersProvider> {/* ✅ ห่อไว้ตรงนี้ */}
+            <AppLayout>{children}</AppLayout>
+          </UsersProvider>
         </NextIntlClientProvider>
       </body>
     </html>

@@ -13,7 +13,10 @@ import { BsRocketTakeoff } from "react-icons/bs";
 import { FaAngleRight } from "react-icons/fa6";
 import { FaAngleDown } from "react-icons/fa6";
 import { db } from "../lib/firebase"; //import firebase from lib
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { MoreVertical } from "lucide-react";
+import { getAuth } from "firebase/auth";
+
 
 export default function Sidebar({ darkMode }: { darkMode: boolean }) {
     const t = useTranslations("sidebar");
@@ -22,36 +25,50 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [projectName, setProjectName] = useState("");
     const [selectedProject, setSelectedProject] = useState("");
-    const [projects, setProjects] = useState<string[]>([]); // เก็บรายชื่อโปรเจกต์
     const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
+    const [hoveredId, setHoveredId] = useState<number | null>(null);
+    const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+    const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+    const [inviteEmail, setInviteEmail] = useState("");
+    const [invitedEmails, setInvitedEmails] = useState<string[]>([]);
+
 
     const handleAddProject = async () => {
         const trimmedName = projectName.trim();
-        if (!trimmedName) {
+        if (!trimmedName || !currentUser) {
             console.log("❌ No project name provided");
             return;
         }
-    
+
         try {
-            console.log("✅ Adding project:", trimmedName);
-            await addDoc(collection(db, "projects"), {
+            const docRef = await addDoc(collection(db, "projects"), {
                 name: trimmedName,
                 createdAt: new Date(),
+                invitedEmails,
+                ownerId: currentUser.uid, // ใส่ UID คนสร้างโปรเจกต์
+                collaborators: [],        // เตรียมไว้สำหรับแชร์ในอนาคต
             });
-    
+            console.log("✅ Adding project:", trimmedName);
+            console.log("✅ Project added by:", currentUser.uid);
+
             // เพิ่มชื่อใหม่เข้า dropdown ทันที
-            setProjects((prev) => [...prev, trimmedName]);
+            setProjects((prev) => [
+                ...prev,
+                { id: docRef.id, name: trimmedName },
+            ]);
             setSelectedProject(trimmedName);
-    
-            console.log("🎉 Project added successfully!");
             setProjectName("");
+            setInvitedEmails([]);
             setIsModalOpen(false);
             setIsProjectDropdownOpen(true);
-    
+
         } catch (err) {
             console.error("🔥 Error adding project:", err);
         }
     };
+
     
 
     const isActive = (path: string) => {
@@ -59,7 +76,38 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
         return normalizedPath.startsWith(path)
             ? `${darkMode ? 'bg-blue text-white border-2 border-blue' : 'bg-white text-blue border-2 border-dark-900'}` 
             : `${darkMode ? 'text-white hover:bg-gray-700' : 'text-dark-800 hover:bg-dark-100'}`;
-    };     
+    };  
+    
+    useEffect(() => {
+    const fetchProjects = async () => {
+        try {
+        const snapshot = await getDocs(collection(db, "projects"));
+        const projectsData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            name: doc.data().name
+        }));
+        setProjects(projectsData);
+        } catch (error) {
+        console.error("Error loading projects:", error);
+        }
+    };
+
+    fetchProjects();
+    }, []);
+
+
+    const handleDeleteProject = async (projectToDeleteId: string) => {
+         const confirmDelete = window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบโปรเจคนี้? การลบจะไม่สามารถกู้คืนได้");
+        if (!confirmDelete) return;
+
+        try {
+            await deleteDoc(doc(db, "projects", projectToDeleteId));
+            setProjects(prev => prev.filter(p => p.id !== projectToDeleteId));
+        } catch (error) {
+            console.error("Error deleting project:", error);
+        }
+    };
+
 
     return (
         <>
@@ -156,17 +204,51 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
                         </li>
 
                         {projects.map((project, idx) => (
-                            <li
-                            key={idx}
-                            onClick={() => {
-                              setSelectedProject(project);
-                              setIsProjectDropdownOpen(false);
+                        <li
+                            key={project.id}
+                            onMouseEnter={() => setHoveredId(idx)}
+                            onMouseLeave={() => {
+                            setHoveredId(null);
+                            setOpenMenuId(null);
                             }}
-                            className="px-4 py-1.5 hover:bg-gray-200 cursor-pointer"
-                          >
-                            {project}
-                          </li>
+                            className="relative px-4 py-1.5 hover:bg-gray-200 cursor-pointer flex items-center justify-between"
+                        >
+                            <span onClick={() => {
+                            setSelectedProject(project.name);
+                            setIsProjectDropdownOpen(false);
+                            }}>
+                            {project.name}
+                            </span>
+
+                            {hoveredId === idx && (
+                            <button
+                                className="text-gray-500 hover:text-black ml-2"
+                                onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuId(openMenuId === idx ? null : idx);
+                                }}
+                            >
+                                <MoreVertical size={16} />
+                            </button>
+                            )}
+
+                            {openMenuId === idx && (
+                            <div className="absolute right-2 top-8 bg-white shadow rounded-2xl z-20">
+                                <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteProject(project.id);
+                                }}
+                                className="delete-project"
+                                >
+                                Delete
+                                </button>
+                            </div>
+                            )}
+                        </li>
                         ))}
+
+
                         </ul>
                     )}
                     </li>
@@ -213,6 +295,53 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
                                 placeholder="A brief description of your project"
                                 className="w-full p-2 mb-4 border border-gray-300 rounded"
                             />
+                            </div>
+
+                            <div className="mb-4">
+                            <label htmlFor="invite-emails" className="text-base font-bold text-[#505258] mb-2">
+                                Invite Members (Email)
+                            </label>
+                            <div className="flex gap-2 mb-2">
+                                <input
+                                id="invite-emails"
+                                type="email"
+                                placeholder="Enter email to invite"
+                                className="w-full p-2 border border-gray-300 rounded"
+                                value={inviteEmail}
+                                onChange={(e) => setInviteEmail(e.target.value)}
+                                />
+                                <button
+                                type="button"
+                                className="px-3 bg-blue text-white rounded"
+                                onClick={() => {
+                                    if (inviteEmail.trim()) {
+                                    setInvitedEmails((prev) => [...prev, inviteEmail.trim()]);
+                                    setInviteEmail("");
+                                    }
+                                }}
+                                >
+                                +
+                                </button>
+                            </div>
+
+                            {invitedEmails.length > 0 && (
+                                <ul className="text-sm text-gray-700">
+                                {invitedEmails.map((email, idx) => (
+                                    <li key={idx} className="flex items-center justify-between border-b py-1">
+                                    <span>{email}</span>
+                                    <button
+                                        type="button"
+                                        className="text-red-500 hover:text-red-700 text-xs"
+                                        onClick={() =>
+                                        setInvitedEmails((prev) => prev.filter((_, i) => i !== idx))
+                                        }
+                                    >
+                                        Remove
+                                    </button>
+                                    </li>
+                                ))}
+                                </ul>
+                            )}
                             </div>
 
                             <div className="flex justify-end gap-2">

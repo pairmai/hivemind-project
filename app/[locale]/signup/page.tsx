@@ -8,6 +8,8 @@ import { FcGoogle } from "react-icons/fc";
 import { useTranslations } from "next-intl";
 import { auth } from "../../lib/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
+import { db } from "../../lib/firebase";
+import { doc, setDoc } from "firebase/firestore";
 
 export default function SignupPage() {
     const router = useRouter();
@@ -20,6 +22,7 @@ export default function SignupPage() {
     const [showPassword, setShowPassword] = useState(false);
     const [confirmPassword, setConfirmPassword] = useState("");
     const [error, setError] = useState("");
+    const [loading, setLoading] = useState(false);
 
     const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -30,14 +33,17 @@ export default function SignupPage() {
         }
 
         try {
-            //Firebase Auth create account
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
-            console.log("User created:", user);
 
-            //after created redirect to focus page
+            // เพิ่ม: บันทึกข้อมูลชื่อ นามสกุลลง Firestore
+            await setDoc(doc(db, "users", user.uid), {
+                firstName,
+                lastName,
+                email
+            });
+
             router.push("/focus");
-
         } catch (error: any) {
             console.error(error.message);
             if (error.code === "auth/email-already-in-use") {
@@ -45,6 +51,8 @@ export default function SignupPage() {
             } else {
                 setError("An error occurred while creating your account");
             }
+        } finally {
+            setLoading(false); // หยุดโหลด ไม่ว่าจะสำเร็จหรือ error
         }
     };
 
@@ -121,14 +129,20 @@ export default function SignupPage() {
 
                     <button
                         type="submit"
-                        className="w-full mt-5 bg-dark-500 text-white p-2 rounded-lg hover:bg-dark-600 text-base">
-                        {t("createacc")}
+                        disabled={loading} // ปิดปุ่มตอนโหลด
+                        className="w-full mt-5 bg-dark-500 text-white p-2 rounded-lg hover:bg-gray-700 text-base flex items-center justify-center"
+                    >
+                        {loading ? (
+                            <span className="loading loading-spinner loading-sm"></span>
+                        ) : (
+                            t("createacc")
+                        )}
                     </button>
                 </form>
 
-                <p className="mt-4 text-center text-dark-600 text-sm">
+                <p className="mt-4 text-center text-dark-500 text-sm">
                     {t("alreadyacc")}
-                    <a href="/login" className="text-dark-600 underline ml-2">{t("logIn")}</a>
+                    <a href="/login" className="text-dark-500 underline ml-2">{t("logIn")}</a>
                 </p>
 
                 <div className="relative flex items-center my-4">

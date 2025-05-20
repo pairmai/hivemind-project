@@ -6,7 +6,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 import { useTranslations } from "next-intl";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../../lib/firebase"; // import firebase auth instance
+import { auth } from "../../lib/firebase";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -104,14 +104,14 @@ export default function LoginPage() {
 
                     <button
                         type="submit"
-                        className="w-full mt-5 bg-dark-500 text-white p-2 rounded-lg hover:bg-dark-600 text-base">
+                        className="w-full mt-5 bg-dark-500 text-white p-2 rounded-lg hover:bg-grey-700 text-base">
                         {t("logIn")}
                     </button>
                 </form>
 
-                <p className="mt-5 text-center text-dark-600 text-sm">
+                <p className="mt-5 text-center text-dark-500 text-sm">
                     {t("donthaveacc")}
-                    <a href="/signup" className="text-dark-600 underline ml-2">{t("signUp")}</a>
+                    <a href="/signup" className="text-dark-500 underline ml-2">{t("signUp")}</a>
                 </p>
             </div>
         </div>

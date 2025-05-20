@@ -6,8 +6,8 @@ import { FaSearch, FaTimes, FaSave, FaClipboardList } from "react-icons/fa";
 import { CgFlagAlt } from "react-icons/cg";
 import { FaRegCalendar } from "react-icons/fa6";
 import { db } from "../../lib/firebase"; // import Firebase
-import { collection, getDocs } from "firebase/firestore"; // ใช้ getDocs เพื่อดึงข้อมูลจาก Firestore
-
+import { collection, onSnapshot, addDoc } from "firebase/firestore"; // ใช้ getDocs เพื่อดึงข้อมูลจาก Firestore
+import { useUsers } from "../../context/UserContext"; 
 
 type Task = {
   id: string;
@@ -16,6 +16,7 @@ type Task = {
   priority?: string; 
   description?: string;
   dueDate?: string;
+  assignee?: string;
 };
 
 type Column = {
@@ -59,6 +60,7 @@ export default function TaskOrganizer() {
   const [newTaskPriorities, setNewTaskPriorities] = useState<{ [columnId: string]: string }>({});
   const [newTaskdueDate, setNewTaskdueDate] = useState<{ [columnId: string]: string }>({});
   const [newTaskDescription, setNewTaskDescription] = useState<{ [columnId: string]: string}>({});
+  const [newTaskAssignedUser, setNewTaskAssignedUser] = useState<{ [columnId: string]: string }>({});
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -67,25 +69,100 @@ export default function TaskOrganizer() {
   const [editedDescription, setEditedDescription] = useState<string>("");
   const [editedPriority, setEditedPriority] = useState<string>("Medium");
   const [editedDueDate, setEditedDueDate] = useState<string>("");
-  const [projects, setProjects] = useState<string[]>([]); // เพื่อเก็บชื่อโปรเจค
-  const [selectedProject, setSelectedProject] = useState<string | null>(null); // เก็บโปรเจคที่ถูกเลือก
+  const [editedAssignee, setEditedAssignee] = useState<string>("");
+  const [projects, setProjects] = useState<{name: string, collaborators: string[]}[]>([]);
+  const [selectedProject, setSelectedProject] = useState(""); 
+  const [editingProject, setEditingProject] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [dueDate, setDueDate] = useState("");
 
-  useEffect(() => {
-    const fetchProjects = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "projects"));
-        const projectNames: string[] = [];
-        querySnapshot.forEach((doc) => {
-          projectNames.push(doc.data().name); // ดึงชื่อโปรเจคจาก Firestore
-        });
-        setProjects(projectNames);
-      } catch (error) {
-        console.error("Error fetching projects: ", error);
-      }
+  const { users } = useUsers(); 
+
+  
+    // ดึงข้อมูลโปรเจคจาก Firestore
+    useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, "projects"), (snapshot) => {
+      const updatedProjects = snapshot.docs.map(doc => ({
+        name: doc.data().name,
+        collaborators: doc.data().collaborators || []
+      }));
+      setProjects(updatedProjects);
+    });
+    return () => unsubscribe();
+  }, []);
+    
+  // 3. เพิ่มฟังก์ชันสำหรับดึง assignees
+ const getAssigneesForSelectedProject = () => {
+  if (!selectedProject || !users) return [];
+
+  const project = projects.find(p => p.name === selectedProject);
+  if (!project) return [];
+
+  return project.collaborators.map(email => {
+    const user = users.find(u => u.email === email);
+    if (user) {
+      return {
+        email,
+        name: `${user.firstName} ${user.lastName}`
+      };
+    }
+    return { email, name: email };
+  });
+};
+
+
+  const ProfileImage = ({ email = "" }: { email?: string }) => {
+    const getInitialsFromEmail = (email: string): string => {
+      const localPart = email.split("@")[0];
+      const parts = localPart.split(/[._]/);
+      return parts.map(part => part[0]?.toUpperCase()).slice(0, 2).join('');
     };
 
-    fetchProjects();
-  }, []); // ดึงโปรเจคเมื่อ component โหลด
+    // ชุดสีสันที่น่าสนใจ
+    const colors = [
+      '#DF34BA','#2C87F2','#9B2CF2','#69B4F7','#2CD3F2','#4D2CF2', '#F27AC3'
+    ];
+
+    // สุ่มสีจากอีเมล (ทำให้สีคงที่สำหรับอีเมลเดียวกัน)
+    const emailHash = email.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const color = colors[emailHash % colors.length];
+
+    const initials = getInitialsFromEmail(email || "");
+
+    return (
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          backgroundColor: color,
+          color: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontWeight: 'bold',
+          fontSize: 14,
+          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.2)'
+        }}
+      >
+        {initials || "?"}
+      </div>
+    );
+  }
+  
+  useEffect(() => {
+    if (addingTaskCol) {
+      // Set default values when opening the form
+      setNewTaskdueDate((prev) => ({
+        ...prev,
+        [addingTaskCol]: prev[addingTaskCol] || new Date().toISOString().split("T")[0]
+      }));
+      setNewTaskPriorities((prev) => ({
+        ...prev,
+        [addingTaskCol]: prev[addingTaskCol] || "Medium"
+      }));
+    }
+  }, [addingTaskCol]);
 
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) return;
@@ -118,10 +195,12 @@ export default function TaskOrganizer() {
     }
   };
 
+
   const addTask = (columnId: string) => {
     const title = newTaskTitles[columnId]?.trim();
     const summary = newTaskSummaries[columnId]?.trim();
     const priority = newTaskPriorities[columnId] || "Medium";
+    const assignee = newTaskAssignedUser[columnId]?.trim();
     const dueDate = newTaskdueDate[columnId]?.trim();
     const description = newTaskDescription[columnId]?.trim();
 
@@ -134,11 +213,12 @@ export default function TaskOrganizer() {
       priority,
       dueDate,
       description,
+      assignee,
     };
 
     const updatedCol = {
       ...columns[columnId],
-      items: [...columns[columnId].items, {...newTask, priority, dueDate, description}],
+      items: [...columns[columnId].items, newTask],
     };
 
     setColumns({
@@ -146,11 +226,17 @@ export default function TaskOrganizer() {
       [columnId]: updatedCol,
     });
 
+    // Reset all form states
     setNewTaskTitles((prev) => ({ ...prev, [columnId]: "" }));
     setNewTaskSummaries((prev) => ({ ...prev, [columnId]: "" }));
     setNewTaskPriorities((prev) => ({ ...prev, [columnId]: "Medium" }));
-    setNewTaskdueDate((prev) => ({ ...prev, [columnId]: ""}));
-    setNewTaskDescription((prev) => ({ ...prev, [columnId]: ""}));
+    setNewTaskAssignedUser((prev) => ({ ...prev, [columnId]: "" }));
+    setNewTaskdueDate((prev) => ({ 
+      ...prev, 
+      [columnId]: new Date().toISOString().split("T")[0] // Reset to today's date
+    }));
+    setNewTaskDescription((prev) => ({ ...prev, [columnId]: "" }));
+    setSelectedProject(""); // Reset project selection
     setAddingTaskCol(null);
   };
 
@@ -180,12 +266,7 @@ export default function TaskOrganizer() {
   };
   
   const startEditing = (task: Task) => {
-    setEditingTaskId(task.id);
-    setEditedContent(task.content);
-    setEditedSummary(task.summary || "");
-    setEditedDescription(task.description || "");
-    setEditedPriority(task.priority || "Medium");
-    setEditedDueDate(task.dueDate || new Date().toISOString().split("T")[0]);
+      setEditingTaskId(task.id);
   };
 
   const cancelEditing = () => {
@@ -201,7 +282,8 @@ export default function TaskOrganizer() {
             summary: editedSummary,
             description: editedDescription,
             priority: editedPriority,
-            dueDate: editedDueDate
+            dueDate: editedDueDate,
+            assignee: editedAssignee
           }
         : task
     );
@@ -218,8 +300,17 @@ export default function TaskOrganizer() {
     setExpandedTaskId(null);
   };
 
+
   const TaskDetailView = ({ task, columnId }: { task: Task, columnId: string }) => {
     const columnName = columns[columnId]?.name || "Unknown Column";  // Get the column name
+    const { users } = useUsers();
+    const user = users && users.length > 0 ? users[0] : null;
+    const fullName = user ? `${user.firstName} ${user.lastName}` : "Loading...";
+    const [assignee] = useState(task.assignee || "");
+    const assigneeName = users.find(u => u.email === assignee);
+    const displayAssigneeName = assigneeName ? `${assigneeName.firstName} ${assigneeName.lastName}` : assignee;
+
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
         <div
@@ -239,7 +330,9 @@ export default function TaskOrganizer() {
             <img src="/Task.png" alt="Logo" width={40} height={40} className="mr-2" />
             <h2 className="text-lg font-semibold text-left">Task</h2>
           </div>
-  
+
+          <hr className="border-t border-gray-200 dark:border-gray-600 my-2" /> 
+
           {/* Project */}
           <label className="block text-l font-bold text-black">Project</label>
           <input
@@ -280,12 +373,31 @@ export default function TaskOrganizer() {
                 />
             </div>
           </div>
+          
+
+          {/* Assignee */}
+        <label className="block text-l font-bold text-black">Assignee</label>
+          <input
+            type="text"
+            className="w-full border p-2 rounded bg-gray-100"
+            value={displayAssigneeName}
+            disabled
+          />
 
           {/* Description */}
           <label className="block text-l font-bold text-black">Description</label>
           <textarea
             className="w-full border p-2 rounded bg-gray-100"
             value={task.description}
+            disabled
+          />
+
+          {/*Assign by*/}
+          <label className="block text-l font-bold text-black">Reporter</label>
+          <input
+            type="text"
+            className="w-full border p-2 rounded bg-gray-100"
+            value={fullName}
             disabled
           />
   
@@ -336,98 +448,197 @@ export default function TaskOrganizer() {
   
 
   const TaskEditView = ({ task, columnId }: { task: Task, columnId: string }) => {
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div 
-          className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex justify-between items-start mb-4">
-            <h3 className="text-xl font-bold dark:text-white">Edit Task</h3>
-            <button 
-              onClick={cancelEditing}
-              className="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
+
+    const { users } = useUsers();
+    const currentUser = users && users.length > 0 ? users[0] : null;
+    const currentUserName = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : "Loading...";
+
+    const [project, setProject] = useState(task.content || "");
+    const [summary, setSummary] = useState(task.summary || "");
+    const [description, setDescription] = useState(task.description || "");
+    const [assignee, setAssignee] = useState(task.assignee || "");
+    const [priority, setPriority] = useState(task.priority || "Medium");
+    const [dueDate, setDueDate] = useState(task.dueDate || "");
+
+
+    // ฟังก์ชันจัดการการเปลี่ยนแปลง project
+    const handleProjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const newProject = e.target.value;
+      setProject(newProject);
+      
+      // รีเซ็ต assignee ถ้า assignee ปัจจุบันไม่อยู่ใน collaborators ของโปรเจคใหม่
+      const selectedProject = projects.find(p => p.name === newProject);
+      if (selectedProject && !selectedProject.collaborators.includes(assignee)) {
+        setAssignee("");
+      }
+    };
+
+    // ฟังก์ชันบันทึกการเปลี่ยนแปลง
+    const handleSave = () => {
+      const updatedTask = {
+        ...task,
+        content: project,
+        summary,
+        description,
+        assignee,
+        priority,
+        dueDate
+      };
+      
+      const updatedItems = columns[columnId].items.map(t => 
+        t.id === task.id ? updatedTask : t
+      );
+      
+      setColumns({
+        ...columns,
+        [columnId]: {
+          ...columns[columnId],
+          items: updatedItems,
+        },
+      });
+      
+      setEditingTaskId(null);
+      setExpandedTaskId(null);
+    };
+  
+   return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div 
+        className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-start mb-4">
+          <h3 className="text-xl font-bold dark:text-white">Edit Task</h3>
+          <button 
+            onClick={() => setEditingTaskId(null)}
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
+          >
+            <FaTimes size={20} />
+          </button>
+        </div>
+        
+        <div>
+          <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Project</label>
+          <select
+            value={project}
+            onChange={handleProjectChange}
+            className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
+          >
+            <option value="" disabled>Select project</option>
+            {projects.map((project) => (
+              <option key={project.name} value={project.name}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+        </div>
+          
+        <div>
+          <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Summary</label>
+          <input
+            type="text"
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
+          />
+        </div>
+        
+        <div>
+          <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
+            rows={4}
+          />
+        </div>
+        
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Priority</label>
+            <select
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
             >
-              <FaTimes size={20} />
-            </button>
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Assignee</label>
+            <select
+              value={assignee}
+              onChange={(e) => setAssignee(e.target.value)}
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
+              disabled={!project}
+            >
+              <option value="">Select assignee</option>
+              {project && users &&
+                projects
+                  .find(p => p.name === project)
+                  ?.collaborators.map(email => {
+                    const user = users.find(u => u.email === email);
+                    const displayName = user 
+                      ? `${user.firstName} ${user.lastName}` 
+                      : email;
+                    
+                    return (
+                      <option key={email} value={email}>
+                        {displayName}
+                      </option>
+                    );
+                  })
+              }
+            </select>
+            
+          </div>
           </div>
           
-          <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
               <input
-                type="text"
-                value={editedContent}
-                onChange={(e) => setEditedContent(e.target.value)}
+                type="date"
+                value={dueDate}
+                min={new Date().toISOString().split("T")[0]}
+                onChange={(e) => setDueDate(e.target.value)}
                 className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
               />
-            </div>
-            
-            <div>
-              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Summary</label>
-              <input
-                type="text"
-                value={editedSummary}
-                onChange={(e) => setEditedSummary(e.target.value)}
-                className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
-              />
-            </div>
-            
-            <div>
-              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
-              <textarea
-                value={editedDescription}
-                onChange={(e) => setEditedDescription(e.target.value)}
-                className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
-                rows={4}
-              />
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Priority</label>
-                <select
-                  value={editedPriority}
-                  onChange={(e) => setEditedPriority(e.target.value)}
-                  className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
-                >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
-                <input
-                  type="date"
-                  value={editedDueDate}
-                  min={new Date().toISOString().split("T")[0]}
-                  onChange={(e) => setEditedDueDate(e.target.value)}
-                  className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
-                />
-              </div>
-            </div>
           </div>
-          
-          <div className="flex justify-end gap-2 mt-6">
-            <button
-              onClick={cancelEditing}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => handleSaveEdit(task.id, columnId)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-black rounded hover:bg-blue-600"
-            >
-              <FaSave /> Save Changes
-            </button>
+
+            <div>
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Reporter</label>
+              <input
+                type="text"
+                value={currentUserName}
+                className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
+                disabled
+              />
           </div>
         </div>
+      
+        <div className="flex justify-end gap-2 mt-6">
+          <button
+            onClick={() => setEditingTaskId(null)}
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-black rounded hover:bg-blue-600"
+          >
+            <FaSave /> Save Changes
+          </button>
+        </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
+
 
   return (
     <div className={darkMode ? "dark" : ""}>
@@ -488,12 +699,177 @@ export default function TaskOrganizer() {
           </div>
 
               <div className="ml-auto mr-4"> {/* ปุ่ม Create Task อยู่ทางขวา */}
-                <button className="creat-task">
+                <button className="creat-task"
+                onClick={() => setShowModal(true)}
+                >
                   + Create Task
                 </button>
               </div>
             </div>
 
+            {/* Create Modal */}
+            {showModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+                <div
+                  className="w-full max-w-md rounded bg-white p-6 shadow-xl relative"  // เพิ่ม 'relative' ที่นี่
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="max-h-[70vh] overflow-y-auto">
+                  {/* ปุ่มปิด */}
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="absolute top-2 right-3 text-gray-400 hover:text-gray-600 text-2xl font-light z-50"
+                  >
+                    &times;
+                  </button>
+                  
+                  <div className="flex items-center mb-4">
+                    <img src="/Task.png" alt="Logo" width={40} height={40} className="mr-2" />
+                    <h2 className="text-lg font-semibold text-left"> Create Task</h2>
+                  </div>
+
+                  <hr className="border-t border-gray-200 dark:border-gray-600 my-2 mb-4" />
+
+                  {/*project create*/}
+                  <label className="block text-lg font-bold text-black mb-4">
+                    Project<span className="text-[#ff0000]">*</span>
+                  </label>
+
+                  <select
+                    value={selectedProject}
+                    onChange={(e) => setSelectedProject(e.target.value)}
+                    className="w-full border border-gray-300 rounded p-2 mb-4"
+                  >
+                    <option value="" disabled>
+                      Select project
+                    </option>
+                    {projects.map((project) => (
+                      <option key={project.name} value={project.name}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/*Summary*/}
+                  <label className="block text-lg font-bold text-black mb-4">
+                    Summary<span className="text-[#ff0000]">*</span>
+                  </label>
+                  <input
+                    placeholder="Add summary"
+                //    value={newTaskSummaries[colId] || ""}
+                    onChange={(e) =>
+                     setNewTaskSummaries((prev) => ({
+                      ...prev,
+                //      [colId]: e.target.value,
+                      }))
+                    }
+                      onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                //          addTask(colId);
+                          }
+                      if (e.key === "Escape") setAddingTaskCol(null);
+                         }}
+                          className="summary-card w-full  border p-2 rounded mb-4"  
+                     />
+
+                  {/*priority & status*/}
+                  <div className="flex space-x-4 mb-4">
+                    <div className="w-1/2">
+                      <label className="block text-l font-bold text-black">Priority</label>
+                      <select
+                        className="w-full border p-2 rounded"
+                     //   value={newEvent.priority}
+                     //   onChange={(e) =>
+                     //     setNewEvent({ ...newEvent, priority: e.target.value as "High" | "Medium" | "Low" })
+                     //  }
+                      >
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                      </select>
+                    </div>
+
+                    <div className="w-1/2">
+                      <label className="block text-l font-bold text-black">Status</label>
+                      <select
+                        className="w-full border p-2 rounded"
+                     //   value={newEvent.status}
+                      // onChange={(e) =>
+                      //   setNewEvent({ ...newEvent, status: e.target.value as "To Do" | "In Progress" | "Done" })
+                      // }
+                      >
+                        <option value="To Do">TO DO</option>
+                        <option value="In Progress">DOING</option>
+                        <option value="Done">DONE</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Assignee */}
+                  <span className="block text-lg font-bold text-black">Assign to:</span>
+                        <div className="mb-4 relative flex items-center">
+                          <select
+                       //     value={newTaskAssignedUser[colId] || ""}
+                            onChange={(e) => 
+                              setNewTaskAssignedUser((prev) => ({
+                                ...prev,
+                       //         [colId]: e.target.value,
+                              }))
+                            }
+                            className="w-full p-2 rounded border border-gray-300"
+                            disabled={!selectedProject}
+                          >
+                            <option value="" disabled hidden>
+                              Select member
+                            </option>
+                            {getAssigneesForSelectedProject().map(({ email, name }) => (
+                              <option key={email} value={email}>
+                                {name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                  {/* Description */}
+                  <label className="block text-lg font-bold text-black">Description</label>
+                    <textarea
+                      className="w-full border p-2 rounded mb-4"
+                      placeholder="Description"
+                  //  value={newEvent.description}
+                  //  onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
+                    />
+
+                  {/* Date */}
+                  <label className="block text-lg font-bold text-black mb-4">Date</label>
+                    <input
+                      type="date"
+                      value={dueDate}
+                      min={new Date().toISOString().split("T")[0]}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded mb-4"
+                    />
+                
+                <button
+                  type="submit"
+                  className="button-create mb-4"
+                //  disabled={newEvent.project.trim() === "" || newEvent.summary.trim() === ""}
+                  >
+                    Create
+                  </button>
+
+                  <button
+                    className="button-cancel"
+                    onClick={() => setShowModal(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+          </div>
+            )}
+
+    
         {/* Kanban Board */}
         <DragDropContext onDragEnd={onDragEnd}>
           <div className="flex gap-4 overflow-x-auto p-4 w-full">
@@ -545,23 +921,30 @@ export default function TaskOrganizer() {
 
                     {/* Form เพิ่ม Task */}
                     {addingTaskCol === colId && (
-                      <div className="bg-white dark:bg-gray-700 rounded-md p-3 mb-3 shadow-sm border border-gray-200 dark:border-gray-600">
-                        {/* Project Input */}
-                        <input
-                          autoFocus
-                          type="text"
-                          placeholder="Project..."
-                          value={newTaskTitles[colId] || ""}
-                          onChange={(e) =>
-                            setNewTaskTitles((prev) => ({
-                              ...prev,
-                              [colId]: e.target.value,
-                            }))
-                          }
-                          className="project-card w-full"  
-                        />
+                    <div className="bg-white dark:bg-gray-700 rounded-md p-3 mb-3 shadow-sm border border-gray-200 dark:border-gray-600">
+                      {/* Project Dropdown */}
+                     <select
+                        value={selectedProject}
+                        onChange={(e) => {
+                          setSelectedProject(e.target.value);
+                          setNewTaskTitles((prev) => ({
+                            ...prev,
+                            [colId]: e.target.value,
+                          }));
+                        }}
+                        className="project-card w-full"
+                      >
+                        <option value="" disabled hidden className="select-project">
+                          select project
+                        </option>
+                        {projects.map((project) => (
+                          <option key={project.name} value={project.name}>
+                            {project.name}
+                          </option>
+                        ))}
+                      </select>
 
-                        {/* Summary Input */}
+                      {/* Summary Input */}
                         <div className="relative flex items-center pl-2 mb-4"> {/* เพิ่ม mb-4 เพื่อแยกบรรทัด */}
                           <FaClipboardList className="text-gray-500 text-l mr-2 icon" />
                           <input
@@ -623,6 +1006,32 @@ export default function TaskOrganizer() {
                           </select>
                         </div>
 
+                        {/* assignee */}
+                        <span className="relative items-center pl-2 mb-4 border-gray-600">Assign to:</span>
+                        <div className="mb-4 relative flex items-center pl-1">
+                          <select
+                            value={newTaskAssignedUser[colId] || ""}
+                            onChange={(e) => 
+                              setNewTaskAssignedUser((prev) => ({
+                                ...prev,
+                                [colId]: e.target.value,
+                              }))
+                            }
+                            className="w-full p-2 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                            disabled={!selectedProject}
+                          >
+                            <option value="" disabled hidden>
+                              Select member
+                            </option>
+                            {getAssigneesForSelectedProject().map(({ email, name }) => (
+                              <option key={email} value={email}>
+                                {name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                    
                         {/* Description */}
                         <div className="relative items-center pl-2 mb-4 border-gray-600">
                           <div> Description </div>
@@ -664,76 +1073,90 @@ export default function TaskOrganizer() {
                       </div>
                     )}
 
-                    {/* Tasks */}
-                    {col.items.map((item, index) => {
-                      // Find which column this task is in for the detail view
-                      const taskColumnId = Object.entries(columns).find(([_, column]) => 
-                        column.items.some(task => task.id === item.id)
-                      )?.[0] || colId;
+                  {/* Tasks */}
+                  {col.items.map((item, index) => {
+                    // Find which column this task is in for the detail view
+                    const taskColumnId = Object.entries(columns).find(([_, column]) => 
+                      column.items.some(task => task.id === item.id)
+                    )?.[0] || colId;
 
-                      return (
-                        <Draggable key={item.id} draggableId={item.id} index={index}>
-                          {(provided) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              className="bg-white dark:bg-gray-700 rounded-md p-3 mb-3 shadow-sm border border-gray-200 dark:border-gray-600 cursor-pointer hover:shadow-md transition-shadow"
-                              onClick={() => setExpandedTaskId(expandedTaskId === item.id ? null : item.id)}
-                            >
-                              <div className="font-semibold text-gray-900 dark:text-white">
-                                {item.content}
+                    return (
+                      <Draggable key={item.id} draggableId={item.id} index={index}>
+                        {(provided) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                            className="bg-white dark:bg-gray-700 rounded-md p-3 mb-3 shadow-sm border border-gray-200 dark:border-gray-600 cursor-pointer hover:shadow-md transition-shadow"
+                            onClick={() => setExpandedTaskId(expandedTaskId === item.id ? null : item.id)}
+                          >
+                            <div className="font-semibold text-gray-900 dark:text-white">
+                              {item.content}
+                            </div>
+
+                            {item.summary && (
+                              <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                                {item.summary}
                               </div>
+                            )}
 
-                              {item.summary && (
-                                <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                                  {item.summary}
-                                </div>
-                              )}
-
-                              {item.priority && (
-                                <>
-                                  <hr className="border-t border-gray-200 dark:border-gray-600 my-2" />
-                                  <div className="flex items-center gap-2 mt-2 text-xs font-medium">
-                                    <CgFlagAlt className="text-lg justify-start text-gray-600" />
-                                    {item.dueDate && (
-                                      <p className="text-sm text-gray-600">
-                                        {new Date(item.dueDate).toLocaleDateString("en-GB", {
-                                          day: "2-digit",
-                                          month: "short",
-                                          year: "numeric",
-                                        })}
-                                      </p>
-                                    )}
-                                    <span
-                                      className={`
-                                        ml-auto px-2 py-0.5 rounded-full 
-                                        ${item.priority === "High" && "high-prior"}
-                                        ${item.priority === "Medium" && "medium-prior"}
-                                        ${item.priority === "Low" && "low-prior"}
-                                      `}
-                                    >
-                                      {item.priority}
-                                    </span>
+                            {/* Assignee pic */}
+                            {/* แทนที่ส่วนแสดง Assignee ด้วยโค้ดนี้ */}
+                            <div className="mt-2">
+                              {item.assignee && (
+                                <div className="flex items-center gap-2 justify-between">
+                                  <div className="text-sm font-semibold text-gray-600 dark:text-gray-300">
+                                    Assignee:
                                   </div>
-                                </>
-                              )}
-
-                              {/* Task Detail Modal */}
-                              {expandedTaskId === item.id && !editingTaskId && (
-                                <TaskDetailView task={item} columnId={taskColumnId} />
-                              )}
-
-                              {/* Task Edit Modal */}
-                              {editingTaskId === item.id && (
-                                <TaskEditView task={item} columnId={taskColumnId} />
+                                  <ProfileImage email={item.assignee} />
+                               </div>
                               )}
                             </div>
-                          )}
-                        </Draggable>
-                      );
-                    })}
-                    {provided.placeholder}
+
+                            {item.priority && (
+                              <>
+                                <hr className="border-t border-gray-200 dark:border-gray-600 my-2" />
+                                <div className="flex items-center gap-2 mt-2 text-xs font-medium">
+                                  <CgFlagAlt className="text-lg justify-start text-gray-600" />
+                                  {item.dueDate && (
+                                    <p className="text-sm text-gray-600">
+                                      {new Date(item.dueDate).toLocaleDateString("en-GB", {
+                                        day: "2-digit",
+                                        month: "short",
+                                        year: "numeric",
+                                      })}
+                                    </p>
+                                  )}
+                                  <span
+                                    className={`
+                                      ml-auto px-2 py-0.5 rounded-full 
+                                      ${item.priority === "High" && "high-prior"}
+                                      ${item.priority === "Medium" && "medium-prior"}
+                                      ${item.priority === "Low" && "low-prior"}
+                                    `}
+                                  >
+                                    {item.priority}
+                                  </span>
+                                </div>
+                              </>
+                            )}
+
+                            {/* Task Detail Modal */}
+                            {expandedTaskId === item.id && !editingTaskId && (
+                              <TaskDetailView task={item} columnId={taskColumnId} />
+                            )}
+
+                            {/* Task Edit Modal */}
+                            {editingTaskId === item.id && (
+                              <TaskEditView task={item} columnId={taskColumnId} />
+                            )}
+                          </div>
+                        )}
+                      </Draggable>
+                    );
+                  })}
+                  {provided.placeholder}
+
                   </div>
                 )}
               </Droppable>
