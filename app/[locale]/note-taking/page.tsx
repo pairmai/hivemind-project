@@ -43,7 +43,7 @@ const formatRelativeTime = (date: Date) => {
 }
 
 export default function NoteTaking() {
-    // const t = useTranslations("note");
+    const t = useTranslations("note");
     const [notes, setNotes] = useState<Note[]>([
         {
             title: "Lorem ipsum",

@@ -6,9 +6,9 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 import { FcGoogle } from "react-icons/fc";
 import { useTranslations } from "next-intl";
-import { auth } from "@/lib/firebase";
+import { auth } from "../../lib/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { db } from "@/lib/firebase";
+import { db } from "../../lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
 
 export default function SignupPage() {

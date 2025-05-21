@@ -62,5 +62,29 @@
     "navbar": {
         "profile": "Profile",
         "logout": "Logout"
+    },
+    "my_calendar": {
+        "mycalendar": "My Calendar",
+        "create_task": "Create Task",
+        "edit_task": "Edit Task",
+        "task": "Task",
+        "project": "Project",
+        "summary": "Summary",
+        "priority": "Priority",
+        "status": "Status",
+        "description": "Description",
+        "to_do": "To Do",
+        "doing": "Doing",
+        "done": "Done",
+        "update": "Update",
+        "cancel": "Cancel",
+        "delete": "Delete",
+        "confirm_delete": "Confirm Delete",
+        "keep_it": "Keep it",
+        "no_tasks": "No tasks yet"    
+    },
+    "note":{
+        
     }
+
 }
