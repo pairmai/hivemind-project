@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { DragDropContext, Droppable, Draggable, DropResult } from "react-beautiful-dnd";
+import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { FaSearch, FaTimes, FaSave, FaClipboardList } from "react-icons/fa";
 import { CgFlagAlt } from "react-icons/cg";
 import { FaRegCalendar } from "react-icons/fa6";
 import { db } from "../../lib/firebase"; // import Firebase
-import { collection, onSnapshot, addDoc } from "firebase/firestore"; // ใช้ getDocs เพื่อดึงข้อมูลจาก Firestore
+import { collection, onSnapshot, addDoc, query, where } from "firebase/firestore"; // ใช้ getDocs เพื่อดึงข้อมูลจาก Firestore
 import { useUsers } from "../../context/UserContext"; 
+import { getAuth } from "firebase/auth";
+
 
 type Task = {
   id: string;
@@ -77,19 +79,35 @@ export default function TaskOrganizer() {
   const [dueDate, setDueDate] = useState("");
 
   const { users } = useUsers(); 
-
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
   
     // ดึงข้อมูลโปรเจคจาก Firestore
-    useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "projects"), (snapshot) => {
-      const updatedProjects = snapshot.docs.map(doc => ({
-        name: doc.data().name,
-        collaborators: doc.data().collaborators || []
-      }));
-      setProjects(updatedProjects);
-    });
-    return () => unsubscribe();
-  }, []);
+
+  useEffect(() => {
+  if (typeof window === "undefined") return; // ต้องรันบน client เท่านั้น
+  const auth = getAuth();
+  const user = auth.currentUser;
+
+  if (!user?.email) return;
+
+  const q = query(
+    collection(db, "projects"),
+    where("collaborators", "array-contains", user.email)
+  );
+
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    const updatedProjects = snapshot.docs.map(doc => ({
+      name: doc.data().name,
+      collaborators: doc.data().collaborators || [],
+    }));
+    setProjects(updatedProjects);
+  });
+
+  return () => unsubscribe();
+}, []);
+
+
     
   // 3. เพิ่มฟังก์ชันสำหรับดึง assignees
  const getAssigneesForSelectedProject = () => {
@@ -120,7 +138,7 @@ export default function TaskOrganizer() {
 
     // ชุดสีสันที่น่าสนใจ
     const colors = [
-      '#DF34BA','#2C87F2','#9B2CF2','#69B4F7','#2CD3F2','#4D2CF2', '#F27AC3'
+      '#2C87F2','#DF34BA', '#D500F9','#00E676','#FFD600','#DF34BA'
     ];
 
     // สุ่มสีจากอีเมล (ทำให้สีคงที่สำหรับอีเมลเดียวกัน)
@@ -575,7 +593,7 @@ export default function TaskOrganizer() {
               className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
               disabled={!project}
             >
-              <option value="">Select assignee</option>
+
               {project && users &&
                 projects
                   .find(p => p.name === project)
@@ -922,27 +940,28 @@ export default function TaskOrganizer() {
                     {/* Form เพิ่ม Task */}
                     {addingTaskCol === colId && (
                     <div className="bg-white dark:bg-gray-700 rounded-md p-3 mb-3 shadow-sm border border-gray-200 dark:border-gray-600">
+
                       {/* Project Dropdown */}
-                     <select
-                        value={selectedProject}
-                        onChange={(e) => {
-                          setSelectedProject(e.target.value);
-                          setNewTaskTitles((prev) => ({
-                            ...prev,
-                            [colId]: e.target.value,
-                          }));
-                        }}
-                        className="project-card w-full"
-                      >
-                        <option value="" disabled hidden className="select-project">
-                          select project
-                        </option>
-                        {projects.map((project) => (
-                          <option key={project.name} value={project.name}>
-                            {project.name}
+                        <select
+                          value={selectedProject}
+                          onChange={(e) => {
+                            setSelectedProject(e.target.value);
+                            setNewTaskTitles((prev) => ({
+                              ...prev,
+                              [colId]: e.target.value,
+                            }));
+                          }}
+                          className="project-card w-full"
+                        >
+                          <option value="" disabled hidden className="select-project">
+                            select project
                           </option>
-                        ))}
-                      </select>
+                          {projects.map((project) => (
+                            <option key={project.name} value={project.name}>
+                              {project.name}
+                            </option>
+                          ))}
+                        </select>
 
                       {/* Summary Input */}
                         <div className="relative flex items-center pl-2 mb-4"> {/* เพิ่ม mb-4 เพื่อแยกบรรทัด */}

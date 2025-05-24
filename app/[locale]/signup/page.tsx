@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 import { FcGoogle } from "react-icons/fc";
@@ -9,7 +9,7 @@ import { useTranslations } from "next-intl";
 import { auth } from "../../lib/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { db } from "../../lib/firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
 
 export default function SignupPage() {
     const router = useRouter();
@@ -23,6 +23,10 @@ export default function SignupPage() {
     const [confirmPassword, setConfirmPassword] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const searchParams = useSearchParams();
+    const projectId = searchParams.get("projectId");
+    const invitedEmail = searchParams.get("email");
+
 
     const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -43,7 +47,21 @@ export default function SignupPage() {
                 email
             });
 
-            router.push("/focus");
+            // ✅ ถ้ามี projectId และ email ตรงกับที่ถูกเชิญ
+            if (projectId && invitedEmail === email) {
+                const projectRef = doc(db, "projects", projectId);
+                await updateDoc(projectRef, {
+                    collaborators: arrayUnion(email)
+                });
+                console.log("✅ User added to project after signup");
+            }
+
+            // ✅ redirect ไปที่หน้า task-organizer หรือ focus
+            if (projectId && invitedEmail === email) {
+                router.push("/task-organizer");
+            } else {
+                router.push("/focus");
+            }
         } catch (error: any) {
             console.error(error.message);
             if (error.code === "auth/email-already-in-use") {
@@ -55,6 +73,7 @@ export default function SignupPage() {
             setLoading(false); // หยุดโหลด ไม่ว่าจะสำเร็จหรือ error
         }
     };
+
 
     const handleGoogleSignup = () => {
         console.log("Google Signup Clicked");

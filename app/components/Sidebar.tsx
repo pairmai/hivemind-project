@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect,useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { RxDashboard } from "react-icons/rx";
 import { FaRegCalendarCheck } from "react-icons/fa6";
@@ -12,15 +12,18 @@ import Link from "next/link";
 import { BsRocketTakeoff } from "react-icons/bs";
 import { FaAngleRight } from "react-icons/fa6";
 import { FaAngleDown } from "react-icons/fa6";
-import { db } from "../lib/firebase"; //import firebase from lib
-import { collection, addDoc, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { db } from "../lib/firebase";
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, arrayUnion } from "firebase/firestore";
 import { MoreVertical } from "lucide-react";
 import { getAuth } from "firebase/auth";
+import { query, where } from "firebase/firestore";
+import { sendEmail } from '../lib/sendEmail';
 
 
 export default function Sidebar({ darkMode }: { darkMode: boolean }) {
     const t = useTranslations("sidebar");
     const pathname = usePathname();
+    const searchParams = useSearchParams();
     const [isOpen, setIsOpen] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [projectName, setProjectName] = useState("");
@@ -34,9 +37,18 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
     const [inviteEmail, setInviteEmail] = useState("");
     const [invitedEmails, setInvitedEmails] = useState<string[]>([]);
 
+    // Check if user came from invite link
+    useEffect(() => {
+        const projectId = searchParams.get("projectId");
+        if (projectId) {
+            // Open the project dropdown automatically
+            setIsProjectDropdownOpen(true);
+        }
+    }, [searchParams]);
 
     const handleAddProject = async () => {
         const trimmedName = projectName.trim();
+
         if (!trimmedName || !currentUser) {
             console.log("❌ No project name provided");
             return;
@@ -45,19 +57,21 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
         try {
             const docRef = await addDoc(collection(db, "projects"), {
                 name: trimmedName,
-                createdAt: new Date(),
+                createdAt: serverTimestamp(),
                 invitedEmails,
-                ownerId: currentUser.uid, // ใส่ UID คนสร้างโปรเจกต์
-                collaborators: [],        // เตรียมไว้สำหรับแชร์ในอนาคต
+                ownerId: currentUser.uid,
+                collaborators: [currentUser.email],
             });
-            console.log("✅ Adding project:", trimmedName);
-            console.log("✅ Project added by:", currentUser.uid);
 
-            // เพิ่มชื่อใหม่เข้า dropdown ทันที
-            setProjects((prev) => [
-                ...prev,
-                { id: docRef.id, name: trimmedName },
-            ]);
+            for (const email of invitedEmails) {
+                await sendEmail({
+                    name: projectName,
+                    email: email,
+                    projectId: docRef.id,
+                    inviteEmail: email,
+                });
+            }
+
             setSelectedProject(trimmedName);
             setProjectName("");
             setInvitedEmails([]);
@@ -68,9 +82,23 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
             console.error("🔥 Error adding project:", err);
         }
     };
+    
+    const handleSendInvites = async (projectName: string, projectId: string, invitedEmails: string[]) => {
+        for (const email of invitedEmails) {
+            try {
+                await sendEmail({
+                    name: projectName,
+                    email: email,
+                    projectId,
+                    inviteEmail: email,
+                });
+            } catch (err) {
+                console.error(`🔥 Error sending email to ${email}:`, err);
+            }
+        }
+    };
 
     
-
     const isActive = (path: string) => {
         const normalizedPath = pathname.replace(/^\/[a-z]{2}\//, "/");
         return normalizedPath.startsWith(path)
@@ -79,22 +107,23 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
     };  
     
     useEffect(() => {
-    const fetchProjects = async () => {
-        try {
-        const snapshot = await getDocs(collection(db, "projects"));
-        const projectsData = snapshot.docs.map(doc => ({
-            id: doc.id,
-            name: doc.data().name
-        }));
-        setProjects(projectsData);
-        } catch (error) {
-        console.error("Error loading projects:", error);
-        }
-    };
+        if (!currentUser?.email) return;
 
-    fetchProjects();
-    }, []);
+        const q = query(
+            collection(db, "projects"),
+            where("collaborators", "array-contains", currentUser.email)
+        );
 
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const projectsData = snapshot.docs.map(doc => ({
+                id: doc.id,
+                name: doc.data().name
+            }));
+            setProjects(projectsData);
+        });
+
+        return () => unsubscribe();
+    }, [currentUser]);
 
     const handleDeleteProject = async (projectToDeleteId: string) => {
          const confirmDelete = window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบโปรเจคนี้? การลบจะไม่สามารถกู้คืนได้");
@@ -108,10 +137,40 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
         }
     };
 
+    const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+    const [selectedProjectId, setSelectedProjectId] = useState("");
+    // เพิ่มฟังก์ชันสำหรับเปิด Modal Invite
+    const handleOpenInviteModal = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    setIsInviteModalOpen(true);
+    };
+
+
+    const [loadingProjects, setLoadingProjects] = useState(false);
+
+    useEffect(() => {
+        if (!currentUser?.email) return;
+
+        setLoadingProjects(true);
+        const q = query(
+            collection(db, "projects"),
+            where("collaborators", "array-contains", currentUser.email)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const projectsData = snapshot.docs.map(doc => ({
+                id: doc.id,
+                name: doc.data().name
+            }));
+            setProjects(projectsData);
+            setLoadingProjects(false);
+        });
+
+        return () => unsubscribe();
+    }, [currentUser]);
 
     return (
         <>
-
             {/* Hamburger Button for Mobile */}
             <button
                 className="fixed top-5 left-5 z-50 p-2 text-2xl rounded-md sm:hidden bg-dark-100 dark:bg-gray-800"
@@ -182,11 +241,9 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
 
                         </div>
 
-            
-
                         <div
                         onClick={(e) => {
-                            e.stopPropagation(); // ไม่ให้ปิด dropdown ตอนกด "+"
+                            e.stopPropagation();
                             setIsModalOpen(true);
                         }}
                         className="flex items-center justify-center gap-1 py-0.5 px-1.5 rounded-lg border border-transparent text-dark-800 hover:bg-dark-100 hover:border-[#5d5d5d] transition-all duration-200"
@@ -233,13 +290,23 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
                             )}
 
                             {openMenuId === idx && (
-                            <div className="absolute right-2 top-8 bg-white shadow rounded-2xl z-20">
+                            <div className="absolute right-2 top-8 bg-white shadow-lg rounded-md z-20 border border-gray-200 w-48">
+                                <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenInviteModal(project.id);
+                                }}
+                                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                                >
+                                Invite Members
+                                </button>
+                                <div className="border-t border-gray-200"></div>
                                 <button
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     handleDeleteProject(project.id);
                                 }}
-                                className="delete-project"
+                                className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50"
                                 >
                                 Delete
                                 </button>
@@ -248,7 +315,6 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
                         </li>
                         ))}
 
-
                         </ul>
                     )}
                     </li>
@@ -256,6 +322,92 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
                     </ul>
                 </div>
             </aside>
+
+            {/* Invite Modal */}
+                {isInviteModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+                    <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+                    <h2 className="text-xl font-bold mb-4">Invite Members (Email)</h2>
+                    
+                    <div className="flex gap-2 mb-4">
+                        <input
+                        type="email"
+                        placeholder="e.g. user@example.com"
+                        className="flex-1 p-2 border border-gray-300 rounded"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        />
+                        <button
+                        type="button"
+                        className="px-3 bg-blue text-white rounded"
+                        onClick={() => {
+                            if (inviteEmail.trim()) {
+                            setInvitedEmails((prev) => [...prev, inviteEmail.trim()]);
+                            setInviteEmail("");
+                            }
+                        }}
+                        >
+                        +
+                        </button>
+                    </div>
+
+                    {invitedEmails.length > 0 && (
+                        <div className="mb-4">
+                        <ul className="space-y-1">
+                            {invitedEmails.map((email, idx) => (
+                            <li key={idx} className="flex justify-between items-center text-xs">
+                                <span>{email}</span>
+                                <button
+                                onClick={() => setInvitedEmails(prev => prev.filter((_, i) => i !== idx))}
+                                className="text-red-500 hover:text-red-700 text-xs"
+                                >
+                                Remove
+                                </button>
+                            </li>
+                            ))}
+                        </ul>
+                        </div>
+                    )}
+
+                    <div className="flex justify-end gap-2">
+                        <button
+                        onClick={async () => {
+                            if (!selectedProjectId || invitedEmails.length === 0) return;
+
+                            try {
+                            // 1. หาชื่อโปรเจคจาก selectedProjectId
+                            const project = projects.find(p => p.id === selectedProjectId);
+                            if (!project) return;
+
+                            // 2. อัปเดต Firestore ก่อน
+                            await updateDoc(doc(db, "projects", selectedProjectId), {
+                                invitedEmails: arrayUnion(...invitedEmails)
+                            });
+
+                            // 3. ส่งอีเมล invite
+                            await handleSendInvites(
+                                project.name, // ชื่อโปรเจค
+                                selectedProjectId, // ID โปรเจค
+                                invitedEmails // รายการอีเมล
+                            );
+
+                            // 4. ปิด Modal & Reset State
+                            setIsInviteModalOpen(false);
+                            setInvitedEmails([]);
+                            alert("Invites sent successfully!");
+                            } catch (error) {
+                            console.error("Failed to send invites:", error);
+                            alert("Failed to send invites. Please try again.");
+                            }
+                        }}
+                        className="px-4 py-2 bg-blue text-white rounded hover:bg-blue-700"
+                        >
+                        Send Invites
+                        </button>
+                    </div>
+                    </div>
+                </div>
+                )}
 
             {/* Modal Form */}
             {isModalOpen && (
@@ -270,7 +422,7 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
                         <form onSubmit={async (e) => {
                             e.preventDefault();
                             await handleAddProject(); 
-                            setIsModalOpen(false); // Close modal
+                            setIsModalOpen(false);
                         }}>
                             <label htmlFor="project-name" className="text-base font-bold text-[#505258] mb-2">
                                 Name
@@ -305,7 +457,7 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
                                 <input
                                 id="invite-emails"
                                 type="email"
-                                placeholder="Enter email to invite"
+                                placeholder="e.g. user@example.com"
                                 className="w-full p-2 border border-gray-300 rounded"
                                 value={inviteEmail}
                                 onChange={(e) => setInviteEmail(e.target.value)}
@@ -353,7 +505,8 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
                                     Cancel
                                 </button>
                                 <button
-                                    type="submit"
+                                    type="button"
+                                    onClick={handleAddProject}
                                     disabled={!projectName.trim()}
                                     className= {`px-4 py-2 bg-blue text-white rounded hover:bg-blue-700 ${
                                         projectName.trim()
@@ -371,99 +524,3 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
         </>
     );
 }
-
-
-// "use client";
-
-// import React, { useState } from "react";
-// import { usePathname } from "next/navigation";
-// import { useTranslations } from "next-intl";
-// import { RxDashboard } from "react-icons/rx";
-// import { FaRegCalendarCheck } from "react-icons/fa6";
-// import { TbNotes } from "react-icons/tb";
-// import { FiSettings } from "react-icons/fi";
-// import { GoTasklist } from "react-icons/go";
-// import { GiHamburgerMenu } from "react-icons/gi";
-// import Link from "next/link";
-
-// export default function Sidebar({ darkMode, setDarkMode }: { darkMode: boolean; setDarkMode: (value: boolean) => void }) {
-//     const t = useTranslations("sidebar");
-//     const pathname = usePathname();
-//     const [isOpen, setIsOpen] = useState(false);
-
-//     const isActive = (path: string) => {
-//         const normalizedPath = pathname.replace(/^\/[a-z]{2}\//, "/");
-//         return normalizedPath.startsWith(path)
-//             ? `${darkMode ? 'bg-blue text-white border-2 border-blue' : 'bg-white text-blue border-2 border-dark-900'}`
-//             : `${darkMode ? 'text-white hover:bg-gray-700' : 'text-dark-800 hover:bg-dark-100'}`;
-//     };
-
-//     return (
-//         <>
-//             {/* Hamburger Button for Mobile */}
-//             <button
-//                 className="fixed top-5 left-5 z-50 p-2 text-2xl rounded-md sm:hidden bg-dark-100 dark:bg-gray-800"
-//                 onClick={() => setIsOpen(!isOpen)}
-//             >
-//                 <GiHamburgerMenu />
-//             </button>
-
-//             {/* Sidebar */}
-//             <aside className={`fixed top-0 left-0 z-40 w-64 h-screen pt-20 transition-transform border-r 
-//             ${darkMode ? "bg-gray-900 border-gray-700" : "bg-dark-900 border-gray-200"} sm:translate-x-0`}>
-//                 <div className="h-full px-3 pb-4 overflow-y-auto">
-//                     <ul className="space-y-2 font-medium">
-//                         <span className={`text-sm ${darkMode ? "text-gray-400" : "text-dark-100"} ms-2`}>MAIN MENU</span>
-//                         <li>
-//                             <Link href="/dashboard" className={`flex items-center p-2 rounded-lg group ${isActive("/dashboard")}`}>
-//                                 <div className="text-2xl"><RxDashboard /></div>
-//                                 <span className="ms-3">{t("dashboard")}</span>
-//                             </Link>
-//                         </li>
-//                         <li>
-//                             <Link href="/task-organizer" className={`flex items-center p-2 rounded-lg group ${isActive("/task-organizer")}`}>
-//                                 <div className="text-2xl"><GoTasklist /></div>
-//                                 <span className="ms-3">{t("taskorganizer")}</span>
-//                             </Link>
-//                         </li>
-//                         <li>
-//                             <Link href="/mycalendar" className={`flex items-center p-2 rounded-lg group ${isActive("/mycalendar")}`}>
-//                                 <div className="text-2xl"><FaRegCalendarCheck /></div>
-//                                 <span className="ms-3">{t("calendar")}</span>
-//                             </Link>
-//                         </li>
-//                         <li>
-//                             <Link href="/note-taking" className={`flex items-center p-2 rounded-lg group ${isActive("/note-taking")}`}>
-//                                 <div className="text-2xl"><TbNotes /></div>
-//                                 <span className="ms-3">{t("note")}</span>
-//                             </Link>
-//                         </li>
-//                         <ul className="pt-4 mt-4 space-y-2 font-medium border-t border-gray-200 dark:border-gray-700"></ul>
-//                         <span className={`text-sm ${darkMode ? "text-gray-400" : "text-dark-200"} ms-2`}>OTHERS</span>
-//                         <li>
-//                             <button
-//                                 onClick={() => setDarkMode(!darkMode)}
-//                                 className={`flex items-center gap-3 px-3 py-2 w-full rounded-md transition-all duration-300 ${darkMode ? "hover:bg-gray-700" : "hover:bg-dark-100"}`}
-//                             >
-//                                 <div className={`relative w-10 h-6 rounded-full p-1 transition-all duration-300 ${darkMode ? "bg-gray-500" : "bg-gray-300"}`}>
-//                                     <div
-//                                         className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-all duration-300 ${darkMode ? "translate-x-4" : "translate-x-0"}`}
-//                                     />
-//                                 </div>
-//                                 <span className={`text-dark-800 ${darkMode ? "text-white" : ""}`}>
-//                                     {darkMode ? t("dark") : t("light")}
-//                                 </span>
-//                             </button>
-//                         </li>
-//                         <li>
-//                             <Link href="#" className={`flex items-center p-2 rounded-lg group ${isActive("#")}`}>
-//                                 <div className="text-2xl"><FiSettings /></div>
-//                                 <span className={`ms-3 ${darkMode ? "text-white" : ""}`}>{t("settings")}</span>
-//                             </Link>
-//                         </li>
-//                     </ul>
-//                 </div>
-//             </aside>
-//         </>
-//     );
-// }
