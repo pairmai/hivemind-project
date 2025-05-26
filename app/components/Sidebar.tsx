@@ -13,7 +13,7 @@ import { BsRocketTakeoff } from "react-icons/bs";
 import { FaAngleRight } from "react-icons/fa6";
 import { FaAngleDown } from "react-icons/fa6";
 import { db } from "../lib/firebase";
-import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, arrayUnion } from "firebase/firestore";
+import { collection, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, arrayUnion } from "firebase/firestore";
 import { MoreVertical } from "lucide-react";
 import { getAuth } from "firebase/auth";
 import { query, where } from "firebase/firestore";
@@ -55,7 +55,14 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
         }
 
         try {
-            const docRef = await addDoc(collection(db, "projects"), {
+            // สร้าง reference ใหม่พร้อม ID อัตโนมัติ
+            const projectRef = doc(collection(db, "projects"));
+            
+            // ใช้ ID ที่สร้างอัตโนมัติ
+            const projectId = projectRef.id;
+
+            await setDoc(projectRef, {
+                id: projectId, // เก็บ ID ไว้ใน document ด้วย
                 name: trimmedName,
                 createdAt: serverTimestamp(),
                 invitedEmails,
@@ -67,12 +74,12 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
                 await sendEmail({
                     name: projectName,
                     email: email,
-                    projectId: docRef.id,
+                    projectId: projectId, // ใช้ ID อัตโนมัติ
                     inviteEmail: email,
                 });
             }
 
-            setSelectedProject(trimmedName);
+            setSelectedProject(projectId); // เก็บ ID ที่ใช้อ้างอิง
             setProjectName("");
             setInvitedEmails([]);
             setIsModalOpen(false);
@@ -109,6 +116,7 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
     useEffect(() => {
         if (!currentUser?.email) return;
 
+        setLoadingProjects(true);
         const q = query(
             collection(db, "projects"),
             where("collaborators", "array-contains", currentUser.email)
@@ -116,10 +124,11 @@ export default function Sidebar({ darkMode }: { darkMode: boolean }) {
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const projectsData = snapshot.docs.map(doc => ({
-                id: doc.id,
-                name: doc.data().name
+                id: doc.id, // ใช้ ID จริงจาก document
+                name: doc.data().name // เก็บชื่อโปรเจค
             }));
             setProjects(projectsData);
+            setLoadingProjects(false);
         });
 
         return () => unsubscribe();

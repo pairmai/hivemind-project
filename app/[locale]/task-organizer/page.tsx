@@ -6,7 +6,7 @@ import { FaSearch, FaTimes, FaSave, FaClipboardList } from "react-icons/fa";
 import { CgFlagAlt } from "react-icons/cg";
 import { FaRegCalendar } from "react-icons/fa6";
 import { db } from "../../lib/firebase"; // import Firebase
-import { collection, onSnapshot, addDoc, query, where } from "firebase/firestore"; // ใช้ getDocs เพื่อดึงข้อมูลจาก Firestore
+import { collection, onSnapshot, addDoc, query, where, serverTimestamp, deleteDoc, doc, updateDoc, or} from "firebase/firestore"; // ใช้ getDocs เพื่อดึงข้อมูลจาก Firestore
 import { useUsers } from "../../context/UserContext"; 
 import { getAuth } from "firebase/auth";
 
@@ -19,6 +19,8 @@ type Task = {
   description?: string;
   dueDate?: string;
   assignee?: string;
+  status?: string;
+  reporter?: string;
 };
 
 type Column = {
@@ -44,10 +46,7 @@ const initialData: { columns: Columns } = {
       name: "Done",
       items: [],
     },
-    addGroup: { 
-      name: "+ Add group", 
-      items: [],
-    },
+    
   },
 };
 
@@ -78,6 +77,13 @@ export default function TaskOrganizer() {
   const [showModal, setShowModal] = useState(false);
   const [dueDate, setDueDate] = useState("");
 
+  const [modalSummary, setModalSummary] = useState("");
+  const [modalPriority, setModalPriority] = useState("Medium");
+  const [modalStatus, setModalStatus] = useState("todo");
+  const [modalAssignee, setModalAssignee] = useState("");
+  const [modalDescription, setModalDescription] = useState("");
+
+
   const { users } = useUsers(); 
   const auth = getAuth();
   const currentUser = auth.currentUser;
@@ -85,27 +91,35 @@ export default function TaskOrganizer() {
     // ดึงข้อมูลโปรเจคจาก Firestore
 
   useEffect(() => {
-  if (typeof window === "undefined") return; // ต้องรันบน client เท่านั้น
-  const auth = getAuth();
-  const user = auth.currentUser;
+    if (typeof window === "undefined") return;
 
-  if (!user?.email) return;
+    const auth = getAuth();
+    const user = auth.currentUser;
 
-  const q = query(
-    collection(db, "projects"),
-    where("collaborators", "array-contains", user.email)
-  );
+    if (!user?.email) return;
 
-  const unsubscribe = onSnapshot(q, (snapshot) => {
-    const updatedProjects = snapshot.docs.map(doc => ({
-      name: doc.data().name,
-      collaborators: doc.data().collaborators || [],
-    }));
-    setProjects(updatedProjects);
-  });
+    const q = query(
+      collection(db, "projects"),
+      where("collaborators", "array-contains", user.email)
+    );
 
-  return () => unsubscribe();
-}, []);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const updatedProjects = snapshot.docs.map(doc => ({
+        id: doc.id, 
+        name: doc.data().name,
+        collaborators: doc.data().collaborators || [],
+      }));
+
+      setProjects(updatedProjects);
+
+      // เคลียร์ selectedProject ถ้าโปรเจคที่เลือกไม่อยู่ในรายการใหม่
+       if (selectedProject && !updatedProjects.some(p => p.id === selectedProject)) {
+      setSelectedProject(""); // เคลียร์ถ้า id ไม่มีในโปรเจคจริง
+    }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
 
     
@@ -182,7 +196,7 @@ export default function TaskOrganizer() {
     }
   }, [addingTaskCol]);
 
-  const onDragEnd = (result: DropResult) => {
+  const onDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
     const { source, destination } = result;
 
@@ -193,70 +207,91 @@ export default function TaskOrganizer() {
     const [movedItem] = sourceItems.splice(source.index, 1);
 
     if (source.droppableId === destination.droppableId) {
+      // ย้ายภายในคอลัมน์เดิม
       sourceItems.splice(destination.index, 0, movedItem);
       setColumns({
         ...columns,
         [source.droppableId]: { ...sourceCol, items: sourceItems },
       });
     } else {
+      // ย้ายข้ามคอลัมน์
       destItems.splice(destination.index, 0, movedItem);
       setColumns({
         ...columns,
         [source.droppableId]: { ...sourceCol, items: sourceItems },
         [destination.droppableId]: { ...destCol, items: destItems },
       });
+
+      // ✅ อัปเดต Firestore ด้วยสถานะใหม่
+      try {
+        await updateDoc(doc(db, "tasks", movedItem.id), {
+          status: destination.droppableId,
+        });
+        console.log("📦 อัปเดตสถานะใน Firestore แล้ว:", destination.droppableId);
+      } catch (error) {
+        console.error("❌ อัปเดต Firestore ไม่สำเร็จ:", error);
+      }
     }
-    
-    // Close expanded task if it was moved
+
+    // ปิด task ที่เปิดอยู่ (ถ้ามี)
     if (expandedTaskId === movedItem.id) {
       setExpandedTaskId(null);
     }
   };
 
+  useEffect(() => {
+    if (projects.length > 0 && !selectedProject) {
+      setSelectedProject(projects[0].name);
+    }
+  }, [projects]);
 
-  const addTask = (columnId: string) => {
-    const title = newTaskTitles[columnId]?.trim();
-    const summary = newTaskSummaries[columnId]?.trim();
-    const priority = newTaskPriorities[columnId] || "Medium";
-    const assignee = newTaskAssignedUser[columnId]?.trim();
-    const dueDate = newTaskdueDate[columnId]?.trim();
-    const description = newTaskDescription[columnId]?.trim();
+  const addTask = async (columnId: string) => {
+  const title = newTaskTitles[columnId]?.trim();
+  const summary = newTaskSummaries[columnId]?.trim();
+  const priority = newTaskPriorities[columnId] || "Medium";
+  const assignee = newTaskAssignedUser[columnId]?.trim();
+  const dueDate = newTaskdueDate[columnId]?.trim();
+  const description = newTaskDescription[columnId]?.trim();
 
-    if (!title) return;
+  if (!title) return;
 
-    const newTask: Task = {
-      id: `task-${Date.now()}`,
-      content: title,
-      summary,
-      priority,
-      dueDate,
-      description,
-      assignee,
-    };
+  if (selectedProject) {
 
-    const updatedCol = {
-      ...columns[columnId],
-      items: [...columns[columnId].items, newTask],
-    };
+    try {
+      const taskRef = collection(db, "tasks");
+      await addDoc(taskRef, {
+        content: title,
+        projectName: selectedProject,
+        summary,
+        priority,
+        description: description || "",
+        assignee: assignee || "",
+        dueDate,
+        createdAt: serverTimestamp(),
+        status: columnId,
+        reporter: currentUser?.email,
+      });
 
-    setColumns({
-      ...columns,
-      [columnId]: updatedCol,
-    });
+      console.log("Task added to Firestore");
+    } catch (error) {
+      console.error("Error adding task to Firestore:", error);
+    }
+  }
 
-    // Reset all form states
-    setNewTaskTitles((prev) => ({ ...prev, [columnId]: "" }));
-    setNewTaskSummaries((prev) => ({ ...prev, [columnId]: "" }));
-    setNewTaskPriorities((prev) => ({ ...prev, [columnId]: "Medium" }));
-    setNewTaskAssignedUser((prev) => ({ ...prev, [columnId]: "" }));
-    setNewTaskdueDate((prev) => ({ 
-      ...prev, 
-      [columnId]: new Date().toISOString().split("T")[0] // Reset to today's date
-    }));
-    setNewTaskDescription((prev) => ({ ...prev, [columnId]: "" }));
-    setSelectedProject(""); // Reset project selection
-    setAddingTaskCol(null);
-  };
+  // Reset form
+  setNewTaskTitles((prev) => ({ ...prev, [columnId]: "" }));
+  setNewTaskSummaries((prev) => ({ ...prev, [columnId]: "" }));
+  setNewTaskPriorities((prev) => ({ ...prev, [columnId]: "Medium" }));
+  setNewTaskAssignedUser((prev) => ({ ...prev, [columnId]: "" }));
+  setNewTaskdueDate((prev) => ({
+    ...prev,
+    [columnId]: new Date().toISOString().split("T")[0],
+  }));
+  setNewTaskDescription((prev) => ({ ...prev, [columnId]: "" }));
+  // ✅ อย่าล้าง selectedProject
+  setAddingTaskCol(null);
+};
+
 
   const filteredColumns = Object.entries(columns).reduce((acc, [colId, col]) => {
     acc[colId] = {
@@ -271,16 +306,31 @@ export default function TaskOrganizer() {
     return acc;
   }, {} as Columns);
 
-  const handleDeleteTask = (taskId: string, columnId: string) => {
-    const updatedItems = columns[columnId].items.filter((task) => task.id !== taskId);
-    setColumns({
-      ...columns,
-      [columnId]: {
-        ...columns[columnId],
-        items: updatedItems,
-      },
-    });
-    if (expandedTaskId === taskId) setExpandedTaskId(null);
+  const handleDeleteTask = async (taskId: string, columnId: string) => {
+    // ลบออกจาก Firestore
+    try {
+      await deleteDoc(doc(db, "tasks", taskId));
+      if (confirm("คุณแน่ใจว่าต้องการลบงานนี้?")) {
+    await deleteDoc(doc(db, "tasks", taskId));
+    }
+
+      console.log("ลบ task สำเร็จ");
+
+      // ลบจาก local state
+      const updatedItems = columns[columnId].items.filter((task) => task.id !== taskId);
+      setColumns({
+        ...columns,
+        [columnId]: {
+          ...columns[columnId],
+          items: updatedItems,
+        },
+      });
+
+      if (expandedTaskId === taskId) setExpandedTaskId(null);
+    } catch (error) {
+      console.error("เกิดข้อผิดพลาดในการลบ task:", error);
+      alert("ไม่สามารถลบ task ได้");
+    }
   };
   
   const startEditing = (task: Task) => {
@@ -318,6 +368,89 @@ export default function TaskOrganizer() {
     setExpandedTaskId(null);
   };
 
+  useEffect(() => {
+      if (!currentUser?.email) return;
+
+      const q = query(
+        collection(db, "tasks"),
+        or(
+          where("assignee", "==", currentUser.email),
+          where("reporter", "==", currentUser.email)
+        )
+      );
+
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const tasksFromFirestore: Task[] = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            content: data.content || "",
+            summary: data.summary || "",
+            description: data.description || "",
+            priority: data.priority || "Medium",
+            dueDate: data.dueDate || "",
+            assignee: data.assignee || "",
+            reporter: data.reporter || "",
+            status: data.status || "todo",
+          };
+        });
+
+        // แยก task ลงคอลัมน์ตาม status
+        const newColumns: Columns = {
+          todo: { name: "To Do", items: [] },
+          inprogress: { name: "In Progress", items: [] },
+          done: { name: "Done", items: [] },
+          };
+
+        tasksFromFirestore.forEach(task => {
+          const status = task.status?.toLowerCase();
+          if (status && newColumns[status]) {
+            newColumns[status].items.push(task);
+          }
+        });
+
+        setColumns(newColumns);
+      });
+
+      return () => unsubscribe();
+    }, [currentUser]);
+
+  const handleCreateTaskFromModal = async () => {
+    if (!selectedProject || !modalSummary.trim()) {
+      alert("Please select project and enter summary");
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, "tasks"), {
+        content: selectedProject,
+        summary: modalSummary,
+        priority: modalPriority,
+        status: modalStatus.toLowerCase(),
+        assignee: modalAssignee,
+        description: modalDescription,
+        dueDate: dueDate,
+        projectName: selectedProject,
+        createdAt: serverTimestamp(),
+        reporter: currentUser?.email,
+      });
+
+      console.log("✅ Task created!");
+      setShowModal(false);
+
+      // ล้าง input
+      setModalSummary("");
+      setModalPriority("Medium");
+      setModalStatus("todo");
+      setModalAssignee("");
+      setModalDescription("");
+      setDueDate("");
+    } catch (err) {
+      console.error("❌ Error creating task:", err);
+      alert("Error creating task");
+    }
+  };
+
 
   const TaskDetailView = ({ task, columnId }: { task: Task, columnId: string }) => {
     const columnName = columns[columnId]?.name || "Unknown Column";  // Get the column name
@@ -327,6 +460,9 @@ export default function TaskOrganizer() {
     const [assignee] = useState(task.assignee || "");
     const assigneeName = users.find(u => u.email === assignee);
     const displayAssigneeName = assigneeName ? `${assigneeName.firstName} ${assigneeName.lastName}` : assignee;
+    const reporterEmail = task.reporter;
+    const reporterUser = users.find(u => u.email === reporterEmail);
+    const reporterName = reporterUser ? `${reporterUser.firstName} ${reporterUser.lastName}` : reporterEmail;
 
 
     return (
@@ -415,7 +551,7 @@ export default function TaskOrganizer() {
           <input
             type="text"
             className="w-full border p-2 rounded bg-gray-100"
-            value={fullName}
+            value={reporterName}
             disabled
           />
   
@@ -478,6 +614,10 @@ export default function TaskOrganizer() {
     const [priority, setPriority] = useState(task.priority || "Medium");
     const [dueDate, setDueDate] = useState(task.dueDate || "");
 
+    const reporterEmail = task.reporter;
+    const reporterUser = users.find(u => u.email === reporterEmail);
+    const reporterName = reporterUser ? `${reporterUser.firstName} ${reporterUser.lastName}` : reporterEmail;
+
 
     // ฟังก์ชันจัดการการเปลี่ยนแปลง project
     const handleProjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -492,31 +632,43 @@ export default function TaskOrganizer() {
     };
 
     // ฟังก์ชันบันทึกการเปลี่ยนแปลง
-    const handleSave = () => {
-      const updatedTask = {
-        ...task,
-        content: project,
-        summary,
-        description,
-        assignee,
-        priority,
-        dueDate
-      };
-      
-      const updatedItems = columns[columnId].items.map(t => 
-        t.id === task.id ? updatedTask : t
-      );
-      
-      setColumns({
-        ...columns,
-        [columnId]: {
-          ...columns[columnId],
-          items: updatedItems,
-        },
-      });
-      
-      setEditingTaskId(null);
-      setExpandedTaskId(null);
+    const handleSave = async () => {
+      try {
+        // สร้าง task ที่อัปเดต
+        const updatedTask = {
+          ...task,
+          content: project,
+          summary,
+          description,
+          assignee,
+          priority,
+          dueDate,
+          updatedAt: new Date() // เพิ่มเวลาอัปเดต
+        };
+        
+        // อัปเดตใน Firestore
+        await updateDoc(doc(db, "tasks", task.id), updatedTask);
+        
+        // อัปเดต state ใน UI
+        const updatedItems = columns[columnId].items.map(t => 
+          t.id === task.id ? updatedTask : t
+        );
+        
+        setColumns({
+          ...columns,
+          [columnId]: {
+            ...columns[columnId],
+            items: updatedItems,
+          },
+        });
+        
+        setEditingTaskId(null);
+        setExpandedTaskId(null);
+        
+      } catch (error) {
+        console.error("Error updating task:", error);
+        // อาจจะเพิ่มการแจ้งเตือนผู้ใช้ที่นี่
+      }
     };
   
    return (
@@ -631,7 +783,7 @@ export default function TaskOrganizer() {
               <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Reporter</label>
               <input
                 type="text"
-                value={currentUserName}
+                value={reporterName}
                 className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
                 disabled
               />
@@ -673,7 +825,7 @@ export default function TaskOrganizer() {
             placeholder="Looking for something? Start typing..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full sm:w-[600px] pl-[40px] p-2 rounded-md bg-[#f4f4f4] dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+            className="w-full sm:w-[1000px] pl-[40px] p-2 rounded-md bg-[#f4f4f4]"
           />
         </div>
 
@@ -769,38 +921,26 @@ export default function TaskOrganizer() {
                   </select>
 
                   {/*Summary*/}
-                  <label className="block text-lg font-bold text-black mb-4">
-                    Summary<span className="text-[#ff0000]">*</span>
-                  </label>
-                  <input
-                    placeholder="Add summary"
-                //    value={newTaskSummaries[colId] || ""}
-                    onChange={(e) =>
-                     setNewTaskSummaries((prev) => ({
-                      ...prev,
-                //      [colId]: e.target.value,
-                      }))
-                    }
-                      onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                //          addTask(colId);
-                          }
-                      if (e.key === "Escape") setAddingTaskCol(null);
-                         }}
-                          className="summary-card w-full  border p-2 rounded mb-4"  
-                     />
+                  <div>
+                    <label className="block text-l font-bold text-black">
+                      Summary<span className="text-[#ff0000]">*</span></label>
+                    <input
+                      type="text"
+                      value={modalSummary}
+                      onChange={(e) => setModalSummary(e.target.value)}
+                      className="w-full border p-2 rounded"
+                      placeholder="Add summary"
+                    />
+                  </div>
 
                   {/*priority & status*/}
                   <div className="flex space-x-4 mb-4">
                     <div className="w-1/2">
                       <label className="block text-l font-bold text-black">Priority</label>
                       <select
+                        value={modalPriority}
+                        onChange={(e) => setModalPriority(e.target.value)}
                         className="w-full border p-2 rounded"
-                     //   value={newEvent.priority}
-                     //   onChange={(e) =>
-                     //     setNewEvent({ ...newEvent, priority: e.target.value as "High" | "Medium" | "Low" })
-                     //  }
                       >
                         <option value="High">High</option>
                         <option value="Medium">Medium</option>
@@ -811,15 +951,13 @@ export default function TaskOrganizer() {
                     <div className="w-1/2">
                       <label className="block text-l font-bold text-black">Status</label>
                       <select
+                        value={modalStatus}
+                        onChange={(e) => setModalStatus(e.target.value)}
                         className="w-full border p-2 rounded"
-                     //   value={newEvent.status}
-                      // onChange={(e) =>
-                      //   setNewEvent({ ...newEvent, status: e.target.value as "To Do" | "In Progress" | "Done" })
-                      // }
                       >
-                        <option value="To Do">TO DO</option>
-                        <option value="In Progress">DOING</option>
-                        <option value="Done">DONE</option>
+                        <option value="todo">TO DO</option>
+                        <option value="inprogress">DOING</option>
+                        <option value="done">DONE</option>
                       </select>
                     </div>
                   </div>
@@ -828,13 +966,8 @@ export default function TaskOrganizer() {
                   <span className="block text-lg font-bold text-black">Assign to:</span>
                         <div className="mb-4 relative flex items-center">
                           <select
-                       //     value={newTaskAssignedUser[colId] || ""}
-                            onChange={(e) => 
-                              setNewTaskAssignedUser((prev) => ({
-                                ...prev,
-                       //         [colId]: e.target.value,
-                              }))
-                            }
+                            value={modalAssignee}
+                            onChange={(e) => setModalAssignee(e.target.value)}
                             className="w-full p-2 rounded border border-gray-300"
                             disabled={!selectedProject}
                           >
@@ -851,12 +984,13 @@ export default function TaskOrganizer() {
 
                   {/* Description */}
                   <label className="block text-lg font-bold text-black">Description</label>
-                    <textarea
-                      className="w-full border p-2 rounded mb-4"
-                      placeholder="Description"
-                  //  value={newEvent.description}
-                  //  onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
-                    />
+                  <textarea
+                    className="w-full border p-2 rounded mb-4"
+                    placeholder="Add more context..."
+                    value={modalDescription}
+                    onChange={(e) => setModalDescription(e.target.value)}
+                  />
+
 
                   {/* Date */}
                   <label className="block text-lg font-bold text-black mb-4">Date</label>
@@ -871,7 +1005,7 @@ export default function TaskOrganizer() {
                 <button
                   type="submit"
                   className="button-create mb-4"
-                //  disabled={newEvent.project.trim() === "" || newEvent.summary.trim() === ""}
+                  onClick={handleCreateTaskFromModal}
                   >
                     Create
                   </button>
@@ -890,16 +1024,16 @@ export default function TaskOrganizer() {
     
         {/* Kanban Board */}
         <DragDropContext onDragEnd={onDragEnd}>
-          <div className="flex gap-4 overflow-x-auto p-4 w-full">
+          <div className="flex justify-center gap-6 overflow-x-auto p-4 w-full">
             {Object.entries(filteredColumns).map(([colId, col]) => (
               <Droppable key={colId} droppableId={colId} isDropDisabled={false} isCombineEnabled={false} ignoreContainerClipping={false}>
                 {(provided) => (
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className="relative bg-gray-100 dark:bg-gray-800 rounded-lg w-full p-4 flex flex-col shadow-md"
+                    className="relative min-w-[435px] max-w-[435px] bg-gray-100 dark:bg-gray-800 rounded-lg w-full p-4 flex flex-col shadow-md"
                   >
-                    <h2 className="text-lg font-semibold mb-2 text-gray-800 dark:text-white flex items-center gap-2">
+                    <h2 className="text-lg font-semibold mb-6 text-gray-800 dark:text-white flex items-center gap-2">
                       <span
                         className={`w-3 h-3 rounded-full ${
                           colId === "todo"
@@ -939,7 +1073,7 @@ export default function TaskOrganizer() {
 
                     {/* Form เพิ่ม Task */}
                     {addingTaskCol === colId && (
-                    <div className="bg-white dark:bg-gray-700 rounded-md p-3 mb-3 shadow-sm border border-gray-200 dark:border-gray-600">
+                    <div className="bg-white dark:bg-gray-700 rounded-xl p-3 mb-3 shadow-sm border border-gray-200 dark:border-gray-600">
 
                       {/* Project Dropdown */}
                         <select
@@ -1106,7 +1240,7 @@ export default function TaskOrganizer() {
                             ref={provided.innerRef}
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
-                            className="bg-white dark:bg-gray-700 rounded-md p-3 mb-3 shadow-sm border border-gray-200 dark:border-gray-600 cursor-pointer hover:shadow-md transition-shadow"
+                            className="bg-white dark:bg-gray-700 rounded-xl p-3 mb-3 shadow-sm border border-gray-200 dark:border-gray-600 cursor-pointer hover:shadow-md transition-shadow"
                             onClick={() => setExpandedTaskId(expandedTaskId === item.id ? null : item.id)}
                           >
                             <div className="font-semibold text-gray-900 dark:text-white">
