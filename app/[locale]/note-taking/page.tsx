@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useTranslations, useLocale, useNow, useFormatter } from "next-intl";
 import { FaPlus } from "react-icons/fa";
 import { MdDeleteOutline } from "react-icons/md";
-import { useTranslations } from "next-intl";
+import { db } from "../../lib/firebase";
+import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, query, where, getDocs, } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 interface Note {
+    id?: string;
     title: string;
     content: string;
     date: string;
@@ -13,80 +17,95 @@ interface Note {
     members: number;
 }
 
-const projectMembers: Record<string, number> = {
-    "ABCD Project": 5,
-    "EFGH Project": 7,
-    "IJKL Project": 6,
-    "MNOP Project": 4,
-    "QRST Project": 9,
-};
+interface Project {
+    id: string;
+    name: string;
+    collaborators: string[];
+}
 
 const formatRelativeTime = (date: Date) => {
-    if (isNaN(date.getTime())) {
-        return "Invalid Date";  // หากไม่ใช่วันที่ที่ถูกต้อง
-    }
-
     const now = new Date();
-    const diff = Math.floor((now.getTime() - date.getTime()) / 1000); // ต่างกันกี่วินาที
-
+    const diff = Math.floor((now.getTime() - date.getTime()) / 1000);  // ต่างกันกี่วินาที
     if (diff < 60) return "just now";
     if (diff < 3600) return `${Math.floor(diff / 60)} minutes ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)} hours ago`;
     if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`;
 
     // ถ้าเกิน 7 วันค่อยโชว์วันที่แบบปกติ
-    return date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-    });
-}
+    return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}/${date.getFullYear()}`;
+};
+
+const formatFullDateTime = (date: Date) => {
+    const day = String(date.getDate()).padStart(2, '0');
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0'); // บวก 1 เพราะ getMonth() เริ่มที่ 0
+    const hour = String(date.getHours()).padStart(2, '0');
+    const minute = String(date.getMinutes()).padStart(2, '0');
+
+    return `${day}/${month}/${year} ${hour}:${minute}`;
+};
 
 export default function NoteTaking() {
     const t = useTranslations("note");
-    const [notes, setNotes] = useState<Note[]>([
-        {
-            title: "Lorem ipsum",
-            content: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aenean ipsum massa, venenatis blandit placerat quis, blandit sed lacus. Vivamus eu odio convallis, imperdiet elit sit amet, commodo dui. Quisque feugiat, tellus quis laoreet pharetra, velit neque pellentesque nibh, eu mattis nisl nulla ac nunc. In a orci et turpis auctor aliquet. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris euismod vulputate ipsum vel tempor. Integer bibendum orci vel mauris aliquam sollicitudin",
-            date: "Dec 25",
-            project: "ABCD Project",
-            members: 5,
-        },
-        {
-            title: "Lorem ipsum",
-            content: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-            date: "Dec 10",
-            project: "EFGH Project",
-            members: 7,
-        },
-        {
-            title: "Lorem ipsum",
-            content: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aenean ipsum massa, venenatis blandit placerat quis, blandit sed lacus. Vivamus eu odio convallis, imperdiet elit sit amet, commodo dui.",
-            date: "Dec 1",
-            project: "IJKL Project",
-            members: 6,
-        },
-        {
-            title: "Lorem ipsum",
-            content: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-            date: "Nov 30",
-            project: "MNOP Project",
-            members: 4,
-        },
-        {
-            title: "Lorem ipsum",
-            content: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aenean ipsum massa, venenatis blandit placerat quis, blandit sed lacus...",
-            date: "Oct 22",
-            project: "QRST Project",
-            members: 9,
-        },
-    ]);
+    const [notes, setNotes] = useState<Note[]>([]);
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [projectNames, setProjectNames] = useState<Record<string, string>>({});
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedNoteIndex, setSelectedNoteIndex] = useState<number | null>(null);
+    const [titleError, setTitleError] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [editedNote, setEditedNote] = useState<Note | null>(null);
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
+
+    const auth = getAuth();
+    const user = auth.currentUser;
+
+    // โหลดข้อมูลแบบเรียลไทม์จาก Firestore
+    useEffect(() => {
+        if (!user?.email) return;
+
+        const fetchProjectsAndNotes = async () => {
+            const projectsRef = collection(db, "projects");
+            const userProjectsQuery = query(
+                projectsRef,
+                where("collaborators", "array-contains", user.email)
+            );
+            const projectsSnapshot = await getDocs(userProjectsQuery);
+
+            const projectList: Project[] = projectsSnapshot.docs.map((docSnap) => ({
+                id: docSnap.id,
+                name: docSnap.data().name || docSnap.id,
+                collaborators: docSnap.data().collaborators || [],
+            }));
+
+            setProjects(projectList);
+
+            const nameMap: Record<string, string> = {};
+            projectList.forEach((proj) => {
+                nameMap[proj.id] = proj.name;
+            });
+            setProjectNames(nameMap);
+
+            const projectIds = projectList.map((p) => p.id);
+            if (projectIds.length === 0) return;
+
+            const notesRef = collection(db, "notes");
+            const notesQuery = query(notesRef, where("project", "in", projectIds));
+
+            const unsubscribe = onSnapshot(notesQuery, (snapshot) => {
+                const updatedNotes = snapshot.docs.map((doc) => ({
+                    id: doc.id,
+                    ...doc.data(),
+                })) as Note[];
+                setNotes(updatedNotes);
+            });
+
+            return () => unsubscribe();
+        };
+
+        fetchProjectsAndNotes();
+    }, [user]);
 
     const openModal = (index: number) => {
         setSelectedNoteIndex(index);
@@ -114,64 +133,69 @@ export default function NoteTaking() {
         setIsModalOpen(true);
     };
 
-    const handleEditChange = (field: keyof Note, value: string) => {
+    const handleEditChange = async (field: keyof Note, value: string) => {
         if (!editedNote) return;
-        const updated = { ...editedNote, [field]: value };
+        let updated = { ...editedNote, [field]: value };
+
         if (field === "project") {
-            updated.members = projectMembers[value] || 0;
+            const project = projects.find((p) => p.id === value);
+            updated.members = project?.collaborators.length || 0;
         }
+
         setEditedNote(updated);
     };
 
-    const saveNote = () => {
-        if (editedNote) {
-            const newNote: Note = {
-                ...editedNote,
-                date: new Date().toISOString(),
-            };
-            let updatedNotes;
-            if (selectedNoteIndex !== null) {
-                updatedNotes = [...notes];
-                updatedNotes[selectedNoteIndex] = newNote;
-            } else {
-                updatedNotes = [newNote, ...notes];
-            }
-            setNotes(
-                updatedNotes.sort((a, b) =>
-                    new Date(b.date).getTime() - new Date(a.date).getTime()
-                )
-            );
-            closeModal();
+    // ✅ บันทึกข้อมูลลง Firestore
+    const saveNote = async () => {
+        if (!editedNote) return;
+
+        // ถ้า title ว่าง ให้แสดง error
+        if (!editedNote.title.trim()) {
+            setTitleError(true);
+            return;
         }
+
+        setTitleError(false); // เคลียร์ error ถ้าใส่ title แล้ว
+
+        const newNote: Note = {
+            ...editedNote,
+            date: new Date().toISOString(),
+        };
+
+        if (editedNote.id) {
+            const docRef = doc(db, "notes", editedNote.id);
+            await updateDoc(docRef, newNote as any);
+        } else {
+            await addDoc(collection(db, "notes"), {
+                ...newNote,
+                timestamp: serverTimestamp(),
+            });
+        }
+
+        closeModal();
     };
 
-    const deleteNote = () => {
+    // ✅ ลบข้อมูลใน Firestore
+    const deleteNote = async () => {
         if (selectedNoteIndex !== null) {
-            const newNotes = [...notes];
-            newNotes.splice(selectedNoteIndex, 1);
-            setNotes(newNotes);
+            const noteToDelete = notes[selectedNoteIndex];
+            if (noteToDelete.id) {
+                await deleteDoc(doc(db, "notes", noteToDelete.id));
+            }
             closeModal();
-            setIsDeleteConfirmationOpen(false);
         }
     };
 
-    const openDeleteConfirmation = () => {
-        setIsDeleteConfirmationOpen(true);
-    };
-
-    const closeDeleteConfirm = () => {
-        setIsDeleteConfirmationOpen(false);
-    };
-
-    const filteredNotes = notes.filter(note =>
-        note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        note.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        note.project.toLowerCase().includes(searchTerm.toLowerCase())
+    const filteredNotes = notes.filter(
+        (note) =>
+            note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            note.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            note.project.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     return (
-        <div>
-            <h2 className="text-2xl font-bold mb-4">Note Taking</h2>
+        <div className="p-4">
+            <h2 className="text-2xl font-bold mb-4">{t("note")}</h2>
 
             {/* Search Input */}
             <label className="input flex items-center space-x-2 border border-gray-300 rounded-md px-2 py-1 mb-4">
@@ -184,7 +208,7 @@ export default function NoteTaking() {
                 <input
                     type="search"
                     className="grow outline-none"
-                    placeholder="Search Note"
+                    placeholder={t("search")}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -196,7 +220,7 @@ export default function NoteTaking() {
                 className="mb-4 btn border-blue bg-white text-blue hover:bg-blue hover:text-white"
             >
                 <div className="text-base"><FaPlus /></div>
-                Create Note
+                {t("create")}
             </button>
 
             {/* Note Cards */}
@@ -206,7 +230,7 @@ export default function NoteTaking() {
                         <div
                             key={index}
                             className="border p-4 rounded shadow cursor-pointer hover:bg-gray-100 flex flex-col"
-                            onClick={() => openModal(notes.indexOf(note))}
+                            onClick={() => openModal(index)}
                         >
                             <div className="flex justify-between text-sm">
                                 <span className="font-semibold">{note.title}</span>
@@ -215,7 +239,7 @@ export default function NoteTaking() {
                             <p className="text-gray-700 text-sm mt-3 mb-4 line-clamp-3">{note.content}</p>
                             <div className="mt-auto text-sm text-gray-500 flex justify-between">
                                 <span>👥 {note.members}</span>
-                                <span>📁 {note.project}</span>
+                                <span>📁 {projectNames[note.project] || note.project}</span>
                             </div>
                         </div>
                     ))
@@ -243,103 +267,102 @@ export default function NoteTaking() {
                             </button>
                         </div>
 
-                        {isEditMode ? (
+                        {isEditMode || !editedNote.id ? (
                             <>
-                                <input
-                                    className="border w-full mb-3 p-2 rounded"
-                                    value={editedNote.title}
-                                    onChange={(e) => handleEditChange("title", e.target.value)}
-                                    placeholder="Note title"
-                                />
+                                <div className="mb-3">
+                                    <label className="block text-sm font-medium text-gray-700">
+                                        {t("title")} <span className="text-red">*</span>
+                                    </label>
+                                    <input
+                                        className={`border w-full p-2 rounded ${titleError ? "border-red" : "border-gray-300"}`}
+                                        value={editedNote.title}
+                                        onChange={(e) => {
+                                            handleEditChange("title", e.target.value);
+                                            if (e.target.value.trim()) setTitleError(false); // แก้ error ถ้าเริ่มพิมพ์
+                                        }}
+                                        placeholder={t("title")}
+                                    />
+                                    {titleError && (
+                                        <p className="text-red-500 text-sm mt-1">Title is required.</p>
+                                    )}
+                                </div>
                                 <textarea
                                     className="border w-full h-32 p-2 rounded mb-3"
                                     value={editedNote.content}
                                     onChange={(e) => handleEditChange("content", e.target.value)}
-                                    placeholder="Note content"
+                                    placeholder={t("content")}
                                 />
                                 <select
                                     className="border w-full p-2 rounded mb-3"
                                     value={editedNote.project}
                                     onChange={(e) => handleEditChange("project", e.target.value)}
                                 >
-                                    <option value="" disabled>Select Project</option>
-                                    {Object.keys(projectMembers).map((proj) => (
-                                        <option key={proj} value={proj}>
-                                            {proj}
+                                    <option value="" disabled>
+                                        {t("select")}
+                                    </option>
+                                    {projects.map((proj) => (
+                                        <option key={proj.id} value={proj.id}>
+                                            {proj.name}
                                         </option>
                                     ))}
                                 </select>
                                 <div className="text-sm text-gray-600 mb-4">
-                                    👥 {editedNote.members} members
+                                    👥 {editedNote.members} {t("members")}
                                 </div>
                                 <div className="flex justify-between">
                                     <button
-                                        className="bg-blue text-white px-4 py-2 rounded hover:bg-blue"
+                                        className="bg-blue text-white px-4 py-2 rounded"
                                         onClick={saveNote}
                                     >
-                                        Save
-                                    </button>
-                                    <button
-                                        className="bg-gray-200 text-black px-4 py-2 rounded hover:bg-gray-400"
-                                        onClick={closeModal}
-                                    >
-                                        Cancel
+                                        {t("save")}
                                     </button>
                                 </div>
                             </>
                         ) : (
                             <>
-                                <h3 className="text-xl font-bold mb-2">{editedNote.title}</h3>
-                                <p className="text-gray-700 mb-4 whitespace-pre-wrap">{editedNote.content}</p>
-                                <div className="text-sm text-gray-500 mb-2">
-                                    📁 {editedNote.project} | 👥 {editedNote.members}
-                                </div>
-                                <div className="text-sm text-gray-400 mb-4">📅  {formatRelativeTime(new Date(editedNote?.date))}</div>
-                                <div className="flex justify-between">
+                                <h3 className="text-lg font-semibold mb-2">{editedNote.title}</h3>
+                                <p className="text-gray-700 mb-4">{editedNote.content}</p>
+                                <p className="text-sm text-gray-500 mb-2">📁 {projectNames[editedNote.project] || editedNote.project}</p>
+                                <p className="text-sm text-gray-500 mb-4">👥 {editedNote.members} {t("members")}</p>
+                                <div className="text-sm text-gray-500 mb-2">📅 {formatFullDateTime(new Date(editedNote?.date))}</div>
+                                <div className="flex justify-end space-x-2">
                                     <button
-                                        className="btn rounded-md shadow-md bg-white text-blue px-4 py-2 hover:bg-blue hover:text-white"
+                                        className="text-blue border px-4 py-1 rounded"
                                         onClick={() => setIsEditMode(true)}
                                     >
-                                        Edit
+                                        {t("edit")}
                                     </button>
                                     <button
-                                        className="btn rounded-full shadow-lg text-red bg-white hover:bg-red hover:text-white"
-                                        onClick={openDeleteConfirmation}
+                                        className="text-red border px-4 py-1 rounded"
+                                        onClick={() => setIsDeleteConfirmationOpen(true)}
                                     >
-                                        <div className="text-2xl"><MdDeleteOutline /></div>
+                                        {t("delete")}
                                     </button>
                                 </div>
                             </>
                         )}
-                    </div>
-                </div>
-            )}
 
-            {/* Delete Confirmation Modal */}
-            {isDeleteConfirmationOpen && (
-                <div
-                    className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50"
-                    onClick={closeModal}
-                >
-                    <div
-                        className="bg-white rounded-lg p-6 w-full max-w-sm relative shadow-lg"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <h3 className="text-lg font-bold mb-4">Are you sure you want to delete this note?</h3>
-                        <div className="flex justify-between">
-                            <button
-                                onClick={deleteNote}
-                                className="btn rounded-md shadow-md text-red bg-white px-4 py-2 hover:bg-red hover:text-white"
-                            >
-                                Yes
-                            </button>
-                            <button
-                                onClick={closeDeleteConfirm}
-                                className="btn rounded-md shadow-md text-blue bg-white px-4 py-2 hover:bg-blue hover:text-white"
-                            >
-                                Cancel
-                            </button>
-                        </div>
+                        {/* confirmDelete */}
+                        {isDeleteConfirmationOpen && (
+                            <div className="mt-4 text-right">
+                                <p className="text-sm mb-2 text-red-600">{t("confirm_delete")}</p>
+                                <div className="flex justify-end space-x-3">
+                                    <button
+                                        onClick={() => setIsDeleteConfirmationOpen(false)}
+                                        className="bg-gray-200 text-gray-800 px-3 py-1 rounded"
+                                    >
+                                        {t("cancel")}
+                                    </button>
+
+                                    <button
+                                        onClick={deleteNote}
+                                        className="bg-red text-white px-3 py-1 rounded"
+                                    >
+                                        {t("yes")}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

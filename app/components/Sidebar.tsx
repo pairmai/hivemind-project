@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { RxDashboard } from "react-icons/rx";
 import { FaRegCalendarCheck } from "react-icons/fa6";
@@ -12,15 +12,18 @@ import Link from "next/link";
 import { BsRocketTakeoff } from "react-icons/bs";
 import { FaAngleRight } from "react-icons/fa6";
 import { FaAngleDown } from "react-icons/fa6";
-import { db } from "../lib/firebase"; //import firebase from lib
-import { collection, addDoc, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { db } from "../lib/firebase";
+import { collection, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, arrayUnion } from "firebase/firestore";
 import { MoreVertical } from "lucide-react";
 import { getAuth } from "firebase/auth";
+import { query, where } from "firebase/firestore";
+import { sendEmail } from '../lib/sendEmail';
 
 
 export default function Sidebar() {
     const t = useTranslations("sidebar");
     const pathname = usePathname();
+    const searchParams = useSearchParams();
     const [isOpen, setIsOpen] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [projectName, setProjectName] = useState("");
@@ -34,66 +37,105 @@ export default function Sidebar() {
     const [inviteEmail, setInviteEmail] = useState("");
     const [invitedEmails, setInvitedEmails] = useState<string[]>([]);
 
+    // Check if user came from invite link
+    useEffect(() => {
+        const projectId = searchParams.get("projectId");
+        if (projectId) {
+            // Open the project dropdown automatically
+            setIsProjectDropdownOpen(true);
+        }
+    }, [searchParams]);
 
     const handleAddProject = async () => {
         const trimmedName = projectName.trim();
+
         if (!trimmedName || !currentUser) {
             console.log("❌ No project name provided");
             return;
         }
 
         try {
-            const docRef = await addDoc(collection(db, "projects"), {
-                name: trimmedName,
-                createdAt: new Date(),
-                invitedEmails,
-                ownerId: currentUser.uid, // ใส่ UID คนสร้างโปรเจกต์
-                collaborators: [],        // เตรียมไว้สำหรับแชร์ในอนาคต
-            });
-            console.log("✅ Adding project:", trimmedName);
-            console.log("✅ Project added by:", currentUser.uid);
+            // สร้าง reference ใหม่พร้อม ID อัตโนมัติ
+            const projectRef = doc(collection(db, "projects"));
 
-            // เพิ่มชื่อใหม่เข้า dropdown ทันที
-            setProjects((prev) => [
-                ...prev,
-                { id: docRef.id, name: trimmedName },
-            ]);
-            setSelectedProject(trimmedName);
+            // ใช้ ID ที่สร้างอัตโนมัติ
+            const projectId = projectRef.id;
+
+            await setDoc(projectRef, {
+                id: projectId, // เก็บ ID ไว้ใน document ด้วย
+                name: trimmedName,
+                createdAt: serverTimestamp(),
+                invitedEmails,
+                ownerId: currentUser.uid,
+                collaborators: [currentUser.email],
+            });
+
+            for (const email of invitedEmails) {
+                await sendEmail({
+                    name: projectName,
+                    email: email,
+                    projectId: projectId, // ใช้ ID อัตโนมัติ
+                    inviteEmail: email,
+                });
+            }
+
+            setSelectedProject(projectId); // เก็บ ID ที่ใช้อ้างอิง
             setProjectName("");
             setInvitedEmails([]);
             setIsModalOpen(false);
             setIsProjectDropdownOpen(true);
+
         } catch (err) {
             console.error("🔥 Error adding project:", err);
         }
     };
+
+    const handleSendInvites = async (projectName: string, projectId: string, invitedEmails: string[]) => {
+        for (const email of invitedEmails) {
+            try {
+                await sendEmail({
+                    name: projectName,
+                    email: email,
+                    projectId,
+                    inviteEmail: email,
+                });
+            } catch (err) {
+                console.error(`🔥 Error sending email to ${email}:`, err);
+            }
+        }
+    };
+
+
     const isActive = (path: string) => {
         const normalizedPath = pathname.replace(/^\/[a-z]{2}\//, "/");
         return normalizedPath.startsWith(path)
-            ? `'bg-blue text-white border-2 border-blue' : 'bg-white text-blue border-2 border-dark-900'`
-            : `'text-white hover:bg-gray-700' : 'text-dark-800 hover:bg-dark-100'`;
+            ? 'bg-white text-blue border-2 border-dark-900'
+            : 'text-dark-800 hover:bg-dark-100';
     };
 
     useEffect(() => {
-        const fetchProjects = async () => {
-            try {
-                const snapshot = await getDocs(collection(db, "projects"));
-                const projectsData = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    name: doc.data().name
-                }));
-                setProjects(projectsData);
-            } catch (error) {
-                console.error("Error loading projects:", error);
-            }
-        };
+        if (!currentUser?.email) return;
 
-        fetchProjects();
-    }, []);
+        setLoadingProjects(true);
+        const q = query(
+            collection(db, "projects"),
+            where("collaborators", "array-contains", currentUser.email)
+        );
 
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const projectsData = snapshot.docs.map(doc => ({
+                id: doc.id, // ใช้ ID จริงจาก document
+                name: doc.data().name // เก็บชื่อโปรเจค
+            }));
+            setProjects(projectsData);
+            setLoadingProjects(false);
+        });
+
+        return () => unsubscribe();
+    }, [currentUser]);
 
     const handleDeleteProject = async (projectToDeleteId: string) => {
-        const confirmDelete = window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบโปรเจคนี้? การลบจะไม่สามารถกู้คืนได้");
+         const confirmDelete = window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบโปรเจคนี้? การลบจะไม่สามารถกู้คืนได้");
         if (!confirmDelete) return;
 
         try {
@@ -104,22 +146,53 @@ export default function Sidebar() {
         }
     };
 
+    const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+    const [selectedProjectId, setSelectedProjectId] = useState("");
+    // เพิ่มฟังก์ชันสำหรับเปิด Modal Invite
+    const handleOpenInviteModal = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    setIsInviteModalOpen(true);
+    };
+
+
+    const [loadingProjects, setLoadingProjects] = useState(false);
+
+    useEffect(() => {
+        if (!currentUser?.email) return;
+
+        setLoadingProjects(true);
+        const q = query(
+            collection(db, "projects"),
+            where("collaborators", "array-contains", currentUser.email)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const projectsData = snapshot.docs.map(doc => ({
+                id: doc.id,
+                name: doc.data().name
+            }));
+            setProjects(projectsData);
+            setLoadingProjects(false);
+        });
+
+        return () => unsubscribe();
+    }, [currentUser]);
 
     return (
         <>
+            {/* Hamburger Button for Mobile */}
             <button
-                className="fixed top-5 left-5 z-50 p-2 text-2xl rounded-md sm:hidden bg-dark-100"
+                className="fixed top-5 left-5 z-50 p-2 text-2xl rounded-md sm:hidden bg-dark-100 dark:bg-gray-800"
                 onClick={() => setIsOpen(!isOpen)}
             >
                 <GiHamburgerMenu />
             </button>
 
             {/* Sidebar */}
-            <aside className={`fixed top-0 left-0 z-40 w-64 h-screen pt-20 transition-transform border-r 
-                "bg-gray-900 border-gray-700" : "bg-dark-900 border-gray-200"} sm:translate-x-0`}>
+            <aside className="fixed top-0 left-0 z-40 w-64 h-screen pt-20 transition-transform border-r bg-dark-900 border-gray-200 sm:translate-x-0">
                 <div className="h-full px-3 pb-4 overflow-y-auto">
                     <ul className="space-y-2 font-medium">
-                        <span className="text-sm text-dark-200 ms-2">MAIN MENU</span>
+                        <span className="text-sm text-dark-100 ms-2">MAIN MENU</span>
                         <li>
                             <Link href="/dashboard" className={`flex items-center p-2 rounded-lg group ${isActive("/dashboard")}`}>
                                 <div className="text-2xl"><RxDashboard /></div>
@@ -148,7 +221,7 @@ export default function Sidebar() {
 
                     {/* Divider */}
                     <ul className="pt-4 mt-4 space-y-2 font-medium border-t border-gray-200 dark:border-gray-700">
-                        <span className={`text-sm ms-2`}>BUILD & CREATE</span>
+                        <span className="text-sm text-dark-200 ms-2">BUILD & CREATE</span>
 
 
                         {/* Project Dropdown Toggle + List รวมกัน */}
@@ -178,7 +251,7 @@ export default function Sidebar() {
 
                                 <div
                                     onClick={(e) => {
-                                        e.stopPropagation(); // ไม่ให้ปิด dropdown ตอนกด "+"
+                                        e.stopPropagation();
                                         setIsModalOpen(true);
                                     }}
                                     className="flex items-center justify-center gap-1 py-0.5 px-1.5 rounded-lg border border-transparent text-dark-800 hover:bg-dark-100 hover:border-[#5d5d5d] transition-all duration-200"
@@ -225,13 +298,23 @@ export default function Sidebar() {
                                             )}
 
                                             {openMenuId === idx && (
-                                                <div className="absolute right-2 top-8 bg-white shadow rounded-2xl z-20">
+                                                <div className="absolute right-2 top-8 bg-white shadow-lg rounded-md z-20 border border-gray-200 w-48">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleOpenInviteModal(project.id);
+                                                        }}
+                                                        className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                                                    >
+                                                        Invite Members
+                                                    </button>
+                                                    <div className="border-t border-gray-200"></div>
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             handleDeleteProject(project.id);
                                                         }}
-                                                        className="delete-project"
+                                                        className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50"
                                                     >
                                                         Delete
                                                     </button>
@@ -240,13 +323,99 @@ export default function Sidebar() {
                                         </li>
                                     ))}
 
-
                                 </ul>
                             )}
                         </li>
+
                     </ul>
                 </div>
             </aside>
+
+            {/* Invite Modal */}
+            {isInviteModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+                    <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+                        <h2 className="text-xl font-bold mb-4">Invite Members (Email)</h2>
+
+                        <div className="flex gap-2 mb-4">
+                            <input
+                                type="email"
+                                placeholder="e.g. user@example.com"
+                                className="flex-1 p-2 border border-gray-300 rounded"
+                                value={inviteEmail}
+                                onChange={(e) => setInviteEmail(e.target.value)}
+                            />
+                            <button
+                                type="button"
+                                className="px-3 bg-blue text-white rounded"
+                                onClick={() => {
+                                    if (inviteEmail.trim()) {
+                                        setInvitedEmails((prev) => [...prev, inviteEmail.trim()]);
+                                        setInviteEmail("");
+                                    }
+                                }}
+                            >
+                                +
+                            </button>
+                        </div>
+
+                        {invitedEmails.length > 0 && (
+                            <div className="mb-4">
+                                <ul className="space-y-1">
+                                    {invitedEmails.map((email, idx) => (
+                                        <li key={idx} className="flex justify-between items-center text-xs">
+                                            <span>{email}</span>
+                                            <button
+                                                onClick={() => setInvitedEmails(prev => prev.filter((_, i) => i !== idx))}
+                                                className="text-red-500 hover:text-red-700 text-xs"
+                                            >
+                                                Remove
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+
+                        <div className="flex justify-end gap-2">
+                            <button
+                                onClick={async () => {
+                                    if (!selectedProjectId || invitedEmails.length === 0) return;
+
+                                    try {
+                                        // 1. หาชื่อโปรเจคจาก selectedProjectId
+                                        const project = projects.find(p => p.id === selectedProjectId);
+                                        if (!project) return;
+
+                                        // 2. อัปเดต Firestore ก่อน
+                                        await updateDoc(doc(db, "projects", selectedProjectId), {
+                                            invitedEmails: arrayUnion(...invitedEmails)
+                                        });
+
+                                        // 3. ส่งอีเมล invite
+                                        await handleSendInvites(
+                                            project.name, // ชื่อโปรเจค
+                                            selectedProjectId, // ID โปรเจค
+                                            invitedEmails // รายการอีเมล
+                                        );
+
+                                        // 4. ปิด Modal & Reset State
+                                        setIsInviteModalOpen(false);
+                                        setInvitedEmails([]);
+                                        alert("Invites sent successfully!");
+                                    } catch (error) {
+                                        console.error("Failed to send invites:", error);
+                                        alert("Failed to send invites. Please try again.");
+                                    }
+                                }}
+                                className="px-4 py-2 bg-blue text-white rounded hover:bg-blue-700"
+                            >
+                                Send Invites
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modal Form */}
             {isModalOpen && (
@@ -254,14 +423,14 @@ export default function Sidebar() {
                     <div className={`bg-white p-6 rounded-lg shadow-lg w-full max-w-md`}>
                         <div className="flex items-center gap-3 mb-[20px]">
                             <BsRocketTakeoff className="text-2xl text-[#292a2e]" />
-                            <span className="text-2xl font-bold text-[#292a2e]">Let's build this</span>
+                            <span className="text-2xl font-bold text-[#292a2e]">Let’s build this</span>
                         </div>
-                        <h2 className="text-base mb-4 text-[#292a2e] leading-tight">Tell us what your project's about — add project details to get started.</h2>
+                        <h2 className="text-base mb-4 text-[#292a2e] leading-tight">Tell us what your project’s about — add project details to get started.</h2>
 
                         <form onSubmit={async (e) => {
                             e.preventDefault();
                             await handleAddProject();
-                            setIsModalOpen(false); // Close modal
+                            setIsModalOpen(false);
                         }}>
                             <label htmlFor="project-name" className="text-base font-bold text-[#505258] mb-2">
                                 Name
@@ -296,7 +465,7 @@ export default function Sidebar() {
                                     <input
                                         id="invite-emails"
                                         type="email"
-                                        placeholder="Enter email to invite"
+                                        placeholder="e.g. user@example.com"
                                         className="w-full p-2 border border-gray-300 rounded"
                                         value={inviteEmail}
                                         onChange={(e) => setInviteEmail(e.target.value)}
@@ -344,11 +513,12 @@ export default function Sidebar() {
                                     Cancel
                                 </button>
                                 <button
-                                    type="submit"
+                                    type="button"
+                                    onClick={handleAddProject}
                                     disabled={!projectName.trim()}
                                     className={`px-4 py-2 bg-blue text-white rounded hover:bg-blue-700 ${projectName.trim()
-                                            ? "bg-blue-600 hover:bg-blue-700"
-                                            : "bg-gray-300 cursor-not-allowed"
+                                        ? "bg-blue hover:bg-blue"
+                                        : "bg-gray-300 cursor-not-allowed"
                                         }`}
                                 >
                                     Create

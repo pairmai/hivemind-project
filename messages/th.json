@@ -73,7 +73,7 @@
         "profile": "โปรไฟล์",
         "logout": "ออกจากระบบ"
     },
-    "my_calendar":{
+    "my_calendar": {
         "mycalendar": "ปฏิทินของฉัน",
         "create_task": "สร้างงาน",
         "edit_task": "แก้ไขงาน",
@@ -92,6 +92,21 @@
         "confirm_delete": "ยืนยันการลบ",
         "keep_it": "เก็บไว้",
         "no_tasks": "ยังไม่มีงาน"
+    },
+    "note": {
+        "note": "การจดบันทึก",
+        "create": "สร้างโน้ต",
+        "search": "ค้นหาโน้ต",
+        "edit": "แก้ไข",
+        "save": "บันทึก",
+        "yes": "ใช่",
+        "cancel": "ยกเลิก",
+        "delete": "ลบโน้ต",
+        "confirm_delete": "คุณแน่ใจไหมว่าจะลบโน้ตนี้?",
+        "noteTaking": "การบันทึกโน้ต",
+        "members": "สมาชิก",
+        "title": "หัวข้อ",
+        "select": "เลือกโปรเจค",
+        "content": "เนื้อหาโน้ต"
     }
-      
 }

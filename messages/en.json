@@ -81,10 +81,22 @@
         "delete": "Delete",
         "confirm_delete": "Confirm Delete",
         "keep_it": "Keep it",
-        "no_tasks": "No tasks yet"    
+        "no_tasks": "No tasks yet"
     },
-    "note":{
-        
+    "note": {
+        "note": "Note Taking",
+        "create": "Create Note",
+        "search": "Search Note",
+        "edit": "Edit",
+        "save": "Save",
+        "yes": "Yes",
+        "cancel": "Cancel",
+        "delete": "Delete",
+        "confirm_delete": "Are you sure you want to delete this note?",
+        "noteTaking": "Note Taking",
+        "members": "members",
+        "title": "Title",
+        "select": "Select",
+        "content": "Content"
     }
-
 }
