@@ -7,7 +7,7 @@ import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 import { FcGoogle } from "react-icons/fc";
 import { useTranslations } from "next-intl";
 import { auth } from "../../lib/firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { db } from "../../lib/firebase";
 import { doc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
 
@@ -23,10 +23,10 @@ export default function SignupPage() {
     const [confirmPassword, setConfirmPassword] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
     const searchParams = useSearchParams();
     const projectId = searchParams.get("projectId");
     const invitedEmail = searchParams.get("email");
-
 
     const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -36,32 +36,25 @@ export default function SignupPage() {
             return;
         }
 
+        setLoading(true);
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
-            // เพิ่ม: บันทึกข้อมูลชื่อ นามสกุลลง Firestore
             await setDoc(doc(db, "users", user.uid), {
                 firstName,
                 lastName,
                 email
             });
 
-            // ✅ ถ้ามี projectId และ email ตรงกับที่ถูกเชิญ
             if (projectId && invitedEmail === email) {
                 const projectRef = doc(db, "projects", projectId);
                 await updateDoc(projectRef, {
                     collaborators: arrayUnion(email)
                 });
-                console.log("✅ User added to project after signup");
             }
 
-            // ✅ redirect ไปที่หน้า task-organizer หรือ focus
-            if (projectId && invitedEmail === email) {
-                router.push("/task-organizer");
-            } else {
-                router.push("/focus");
-            }
+            router.push(projectId ? "/task-organizer" : "/focus");
         } catch (error: any) {
             console.error(error.message);
             if (error.code === "auth/email-already-in-use") {
@@ -70,18 +63,50 @@ export default function SignupPage() {
                 setError("An error occurred while creating your account");
             }
         } finally {
-            setLoading(false); // หยุดโหลด ไม่ว่าจะสำเร็จหรือ error
+            setLoading(false);
         }
     };
 
+    const handleGoogleSignup = async () => {
+        setGoogleLoading(true);
+        try {
+            const provider = new GoogleAuthProvider();
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
 
-    const handleGoogleSignup = () => {
-        console.log("Google Signup Clicked");
+            await setDoc(doc(db, "users", user.uid), {
+                firstName: user.displayName?.split(" ")[0] || "User",
+                lastName: user.displayName?.split(" ")[1] || "",
+                email: user.email
+            });
+
+            if (projectId && invitedEmail === user.email) {
+                const projectRef = doc(db, "projects", projectId);
+                await updateDoc(projectRef, {
+                    collaborators: arrayUnion(user.email)
+                });
+            }
+
+            router.push(projectId ? "/task-organizer" : "/focus");
+        } catch (error: any) {
+            console.error("Google Signup Error:", error);
+            setError(error.message || "Failed to sign up with Google");
+        } finally {
+            setGoogleLoading(false);
+        }
     };
 
     return (
         <div className="flex items-center justify-center min-h-screen bg-gray-100">
             <div className="w-full max-w-sm bg-white p-4 rounded-xl shadow-lg">
+                
+                {googleLoading && (
+                    <div className="fixed inset-0 bg-white bg-opacity-60 flex items-center justify-center z-50">
+                        <div className="loading loading-spinner text-dark-500"></div>
+                        <p className="ml-2 text-dark-500">Signing you up...</p>
+                    </div>
+                )}
+
                 <img src="/bee-hive.png" alt="Logo" width={64} height={64} className="mx-auto" />
                 <h2 className="text-xl font-bold text-center text-gray-800 mt-4">{t("signUp")}</h2>
                 <form className="mt-6" onSubmit={handleSignup}>
@@ -148,7 +173,7 @@ export default function SignupPage() {
 
                     <button
                         type="submit"
-                        disabled={loading} // ปิดปุ่มตอนโหลด
+                        disabled={loading}
                         className="w-full mt-5 bg-dark-500 text-white p-2 rounded-lg hover:bg-gray-700 text-base flex items-center justify-center"
                     >
                         {loading ? (
@@ -173,10 +198,17 @@ export default function SignupPage() {
                 <div className="mt-4 flex justify-center">
                     <button
                         onClick={handleGoogleSignup}
+                        disabled={googleLoading}
                         className="w-full flex items-center justify-center gap-2 border border-dark-100 p-2 rounded-lg hover:bg-gray-100"
                     >
-                        <FcGoogle className="text-xl" />
-                        <span className="text-sm">Sign Up with Google</span>
+                        {googleLoading ? (
+                            <span className="loading loading-spinner loading-sm"></span>
+                        ) : (
+                            <>
+                                <FcGoogle className="text-xl" />
+                                <span className="text-sm">Sign Up with Google</span>
+                            </>
+                        )}
                     </button>
                 </div>
             </div>

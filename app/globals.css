@@ -159,22 +159,22 @@ progress.progress-info::-moz-progress-bar {
   color: red;
 }
 
-.todo-event{
-  background-color: #f8d5cf;
+.high-event{
+  background-color: #FEE9E9;
   border-radius: 0.375rem; /* rounded */
   border:transparent;
   cursor: pointer;
 }
 
-.doing-event{
-  background-color: #ffe59a;
+.medium-event{
+  background-color: #FCF2E3;
   border-radius: 0.375rem; /* rounded */
   border:transparent;
   cursor: pointer;
 }
 
-.done-event{
-  background-color: #dfcaf3;
+.low-event{
+  background-color: #E4E6FB;
   border-radius: 0.375rem; /* rounded */
   border:transparent;
   cursor: pointer;

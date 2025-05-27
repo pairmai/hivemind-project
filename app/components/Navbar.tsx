@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import ProfileImage from "../components/ProfileImage";
 
@@ -14,6 +14,9 @@ const Navbar: React.FC = () => {
     const [userName, setUserName] = useState("");
     const [userEmail, setUserEmail] = useState("");
     const router = useRouter();
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [newFirstName, setNewFirstName] = useState("");
+    const [newLastName, setNewLastName] = useState("");
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -36,6 +39,30 @@ const Navbar: React.FC = () => {
 
     const toggleProfile = () => {
         setIsProfileOpen(!isProfileOpen);
+    };
+
+    const handleEditName = () => {
+    setIsEditingName(true);
+    const [first = "", last = ""] = userName.split(" ");
+    setNewFirstName(first);
+    setNewLastName(last);
+    };
+
+    const handleSaveName = async () => {
+        const user = auth.currentUser;
+        if (!user) return;
+
+        try {
+            const userRef = doc(db, "users", user.uid);
+            await updateDoc(userRef, {
+                firstName: newFirstName,
+                lastName: newLastName,
+            });
+            setUserName(`${newFirstName} ${newLastName}`);
+            setIsEditingName(false);
+        } catch (error) {
+            console.error("Error updating name:", error);
+        }
     };
 
     const handleLogout = async () => {
@@ -70,16 +97,38 @@ const Navbar: React.FC = () => {
 
                         {isProfileOpen && (
                             <ul tabIndex={0} className="menu menu-sm dropdown-content rounded-box z-10 mt-3 w-52 p-2 shadow-lg bg-white text-black">
-                                <span className="text-base font-bold text-center mb-3">{userName || "Person"}</span>
-                                <div className="flex flex-wrap gap-2 mb-2 justify-center">
-                                    <span className="text-xs bg-black text-white px-4 py-1 rounded-full">IT</span>
-                                    <span className="text-xs bg-black text-white px-4 py-1 rounded-full">Frontend</span>
+                                <div className="text-center mb-3">
+                                {isEditingName ? (
+                                    <>
+                                    <input
+                                        className="input input-bordered w-full mb-1 text-sm"
+                                        value={newFirstName}
+                                        onChange={(e) => setNewFirstName(e.target.value)}
+                                        placeholder="First name"
+                                    />
+                                    <input
+                                        className="input input-bordered w-full mb-2 text-sm"
+                                        value={newLastName}
+                                        onChange={(e) => setNewLastName(e.target.value)}
+                                        placeholder="Last name"
+                                    />
+                                    <button className="btn btn-sm btn-primary w-full mb-1" onClick={handleSaveName}>
+                                        {t('save')}
+                                    </button>
+                                    <button className="btn btn-sm w-full" onClick={() => setIsEditingName(false)}>
+                                        {t('cancel')}
+                                    </button>
+                                    </>
+                                ) : (
+                                    <>
+                                    <span className="text-base font-bold">{userName || "Person"}</span>
+                                    <button className="btn btn-sm mt-2 w-full" onClick={handleEditName}>
+                                        {t('edit_name')}
+                                    </button>
+                                    </>
+                                )}
                                 </div>
-                                <li>
-                                    <a className="justify-between text-sm hover:bg-gray-100 rounded-md p-2">
-                                        {t("profile")}
-                                    </a>
-                                </li>
+                                
                                 <li>
                                     <button
                                         onClick={handleLogout}

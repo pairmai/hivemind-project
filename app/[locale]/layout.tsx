@@ -1,7 +1,7 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { Inter, Prompt } from "next/font/google";
+import { Inter, Kanit } from "next/font/google";
 import AppLayout from './AppLayout';
 import "../globals.css";
 
@@ -17,7 +17,7 @@ const inter = Inter({
   weight: ["400", "500", "700"],
 });
 
-const prompt = Prompt({
+const kanit = Kanit({
   subsets: ["thai"],
   weight: ["400", "500", "700"],
 });
@@ -40,7 +40,7 @@ export default async function RootLayout({
 
   return (
     <html lang={locale}>
-      <body className={inter.className}>
+      <body className={`${inter.className} ${locale === "th" ? kanit.className : ""}`}> {/* ใช้ Kanit ถ้าเป็นภาษาไทย */}
         <NextIntlClientProvider locale={locale} messages={messages}>
           <UsersProvider> {/* ✅ ห่อไว้ตรงนี้ */}
             <AppLayout>{children}</AppLayout>
