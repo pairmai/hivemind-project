@@ -39,6 +39,7 @@
     },
     "dashboard": {
         "dashboard": "Dashboard",
+        "project": "Projects",
         "total": "Total Projects",
         "notStarted": "Not Started",
         "inprogress": "In Progress",
@@ -48,7 +49,12 @@
         "Assigned": "Assigned",
         "Task": "Task",
         "Due Date": "Due Date",
-        "progress": "Progress"
+        "progress": "Progress",
+        "task_today": "Tasks for Today",
+        "done": "Done",
+        "no_proj": "No projects found.",
+        "today": "Today",
+        "search": "Search Projects"
     },
     "sidebar": {
         "dashboard": "Dashboard",
@@ -126,11 +132,17 @@
         "members": "members",
         "title": "Title",
         "select": "Select",
-        "content": "Content"
+        "content": "Content",
+        "no_note": "No notes found.",
+        "new_note": "New Note"
     },
-    "forgotPassword":{
+    "forgotPassword": {
         "forgotPass": "Forgot Password",
         "reset": "Send Reset Link",
         "email": "Enter your email"
+    },
+    "calendar": {
+        "noTaskToday": "No tasks today",
+        "tasksOn": "Tasks on"
     }
 }

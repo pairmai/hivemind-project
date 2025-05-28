@@ -13,7 +13,7 @@ import { BsRocketTakeoff } from "react-icons/bs";
 import { FaAngleRight } from "react-icons/fa6";
 import { FaAngleDown } from "react-icons/fa6";
 import { db } from "../lib/firebase";
-import { collection, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, arrayUnion } from "firebase/firestore";
+import { collection, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, arrayUnion, addDoc } from "firebase/firestore";
 import { MoreVertical } from "lucide-react";
 import { getAuth } from "firebase/auth";
 import { query, where } from "firebase/firestore";
@@ -36,6 +36,7 @@ export default function Sidebar() {
     const currentUser = auth.currentUser;
     const [inviteEmail, setInviteEmail] = useState("");
     const [invitedEmails, setInvitedEmails] = useState<string[]>([]);
+    const [projectNote, setProjectNote] = useState("");
 
     // Check if user came from invite link
     useEffect(() => {
@@ -48,6 +49,7 @@ export default function Sidebar() {
 
     const handleAddProject = async () => {
         const trimmedName = projectName.trim();
+        const trimmedNote = projectNote?.trim();
 
         if (!trimmedName || !currentUser) {
             console.log("❌ No project name provided");
@@ -57,7 +59,6 @@ export default function Sidebar() {
         try {
             // สร้าง reference ใหม่พร้อม ID อัตโนมัติ
             const projectRef = doc(collection(db, "projects"));
-
             // ใช้ ID ที่สร้างอัตโนมัติ
             const projectId = projectRef.id;
 
@@ -70,6 +71,18 @@ export default function Sidebar() {
                 collaborators: [currentUser.email],
             });
 
+            // ถ้ามีโน้ตให้เพิ่มเข้าไปใน collection "notes"
+            if (trimmedNote) {
+                await addDoc(collection(db, "notes"), {
+                    title: `Note for ${trimmedName}`,
+                    content: trimmedNote,
+                    date: new Date().toISOString(),
+                    project: projectId,
+                    members: 1,
+                    timestamp: serverTimestamp(),
+                });
+            }
+
             for (const email of invitedEmails) {
                 await sendEmail({
                     name: projectName,
@@ -81,10 +94,12 @@ export default function Sidebar() {
 
             setSelectedProject(projectId); // เก็บ ID ที่ใช้อ้างอิง
             setProjectName("");
+            setProjectNote("");
             setInvitedEmails([]);
             setIsModalOpen(false);
             setIsProjectDropdownOpen(true);
 
+            console.log("✅ Project and note added successfully!");
         } catch (err) {
             console.error("🔥 Error adding project:", err);
         }
@@ -135,7 +150,7 @@ export default function Sidebar() {
     }, [currentUser]);
 
     const handleDeleteProject = async (projectToDeleteId: string) => {
-         const confirmDelete = window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบโปรเจคนี้? การลบจะไม่สามารถกู้คืนได้");
+        const confirmDelete = window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบโปรเจคนี้? การลบจะไม่สามารถกู้คืนได้");
         if (!confirmDelete) return;
 
         try {
@@ -150,8 +165,8 @@ export default function Sidebar() {
     const [selectedProjectId, setSelectedProjectId] = useState("");
     // เพิ่มฟังก์ชันสำหรับเปิด Modal Invite
     const handleOpenInviteModal = (projectId: string) => {
-    setSelectedProjectId(projectId);
-    setIsInviteModalOpen(true);
+        setSelectedProjectId(projectId);
+        setIsInviteModalOpen(true);
     };
 
 
@@ -454,6 +469,8 @@ export default function Sidebar() {
                                     type="text"
                                     placeholder={t('breifNote')}
                                     className="w-full p-2 mb-4 border border-gray-300 rounded"
+                                    value={projectNote}
+                                    onChange={(e) => setProjectNote(e.target.value)}
                                 />
                             </div>
 

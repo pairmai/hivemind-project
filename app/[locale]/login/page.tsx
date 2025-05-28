@@ -134,7 +134,7 @@ export default function LoginPage() {
                     </div>
 
                     {errorMessage && (
-                        <p className="text-red-500 text-sm mt-2">{errorMessage}</p>
+                        <p className="text-red text-sm mt-2">{errorMessage}</p>
                     )}
 
                     <div className="flex relative items-center mt-5">

@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useTranslations, useLocale, useNow, useFormatter } from "next-intl";
+import { useTranslations } from "next-intl";
 import { FaPlus } from "react-icons/fa";
-import { MdDeleteOutline } from "react-icons/md";
 import { db } from "../../lib/firebase";
 import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, query, where, getDocs, } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
@@ -52,7 +51,6 @@ export default function NoteTaking() {
     const [projectNames, setProjectNames] = useState<Record<string, string>>({});
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedNoteIndex, setSelectedNoteIndex] = useState<number | null>(null);
-    const [titleError, setTitleError] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [editedNote, setEditedNote] = useState<Note | null>(null);
@@ -98,14 +96,15 @@ export default function NoteTaking() {
                     id: doc.id,
                     ...doc.data(),
                 })) as Note[];
+                // ใส่บรรทัดนี้เพื่อเรียงจากใหม่สุด → เก่าสุด
+                updatedNotes.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                 setNotes(updatedNotes);
             });
 
             return () => unsubscribe();
         };
-
         fetchProjectsAndNotes();
-    }, [user]);
+    }, [user, projects]);
 
     const openModal = (index: number) => {
         setSelectedNoteIndex(index);
@@ -148,14 +147,6 @@ export default function NoteTaking() {
     // ✅ บันทึกข้อมูลลง Firestore
     const saveNote = async () => {
         if (!editedNote) return;
-
-        // ถ้า title ว่าง ให้แสดง error
-        if (!editedNote.title.trim()) {
-            setTitleError(true);
-            return;
-        }
-
-        setTitleError(false); // เคลียร์ error ถ้าใส่ title แล้ว
 
         const newNote: Note = {
             ...editedNote,
@@ -238,13 +229,16 @@ export default function NoteTaking() {
                             </div>
                             <p className="text-gray-700 text-sm mt-3 mb-4 line-clamp-3">{note.content}</p>
                             <div className="mt-auto text-sm text-gray-500 flex justify-between">
-                                <span>👥 {note.members}</span>
+                                <span>
+                                    👥 {projects.find(p => p.id === note.project)?.collaborators.length ?? note.members}
+                                </span>
+
                                 <span>📁 {projectNames[note.project] || note.project}</span>
                             </div>
                         </div>
                     ))
                 ) : (
-                    <div className="text-center col-span-full text-gray-500">No notes found.</div>
+                    <div className="text-center col-span-full text-gray-500">{t("no_note")}</div>
                 )}
             </div>
 
@@ -270,21 +264,15 @@ export default function NoteTaking() {
                         {isEditMode || !editedNote.id ? (
                             <>
                                 <div className="mb-3">
-                                    <label className="block text-sm font-medium text-gray-700">
-                                        {t("title")} <span className="text-red">*</span>
-                                    </label>
+                                    <h2 className="block font-medium">
+                                        {t("new_note")}
+                                    </h2>
                                     <input
-                                        className={`border w-full p-2 rounded ${titleError ? "border-red" : "border-gray-300"}`}
+                                        className={`border w-full p-2 rounded border-gray-300`}
                                         value={editedNote.title}
-                                        onChange={(e) => {
-                                            handleEditChange("title", e.target.value);
-                                            if (e.target.value.trim()) setTitleError(false); // แก้ error ถ้าเริ่มพิมพ์
-                                        }}
+                                        onChange={(e) => handleEditChange("title", e.target.value)}
                                         placeholder={t("title")}
                                     />
-                                    {titleError && (
-                                        <p className="text-red-500 text-sm mt-1">Title is required.</p>
-                                    )}
                                 </div>
                                 <textarea
                                     className="border w-full h-32 p-2 rounded mb-3"
@@ -323,7 +311,9 @@ export default function NoteTaking() {
                                 <h3 className="text-lg font-semibold mb-2">{editedNote.title}</h3>
                                 <p className="text-gray-700 mb-4">{editedNote.content}</p>
                                 <p className="text-sm text-gray-500 mb-2">📁 {projectNames[editedNote.project] || editedNote.project}</p>
-                                <p className="text-sm text-gray-500 mb-4">👥 {editedNote.members} {t("members")}</p>
+                                <p className="text-sm text-gray-500 mb-4">
+                                    👥 {projects.find(p => p.id === editedNote.project)?.collaborators.length ?? editedNote.members} {t("members")}
+                                </p>
                                 <div className="text-sm text-gray-500 mb-2">📅 {formatFullDateTime(new Date(editedNote?.date))}</div>
                                 <div className="flex justify-end space-x-2">
                                     <button
