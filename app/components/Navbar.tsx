@@ -9,28 +9,33 @@ import { useRouter } from "next/navigation";
 import ProfileImage from "../components/ProfileImage";
 
 const Navbar: React.FC = () => {
-    const t = useTranslations("navbar");
+    const t = useTranslations('navbar');
     const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
     const [userName, setUserName] = useState("");
     const [userEmail, setUserEmail] = useState("");
+    const [userId, setUserId] = useState("");
+    const [firstName, setFirstName] = useState("");
+    const [lastName, setLastName] = useState("");
     const router = useRouter();
-    const [isEditingName, setIsEditingName] = useState(false);
-    const [newFirstName, setNewFirstName] = useState("");
-    const [newLastName, setNewLastName] = useState("");
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
+                setUserId(user.uid);
                 setUserEmail(user.email || "");
 
                 const userDoc = await getDoc(doc(db, "users", user.uid));
                 if (userDoc.exists()) {
                     const data = userDoc.data();
+                    setFirstName(data.firstName);
+                    setLastName(data.lastName);
                     setUserName(`${data.firstName} ${data.lastName}`);
                 }
             } else {
-                setUserName(""); //ออกจากระบบแล้วล้าง
+                setUserName("");
                 setUserEmail("");
+                setUserId("");
             }
         });
 
@@ -41,27 +46,26 @@ const Navbar: React.FC = () => {
         setIsProfileOpen(!isProfileOpen);
     };
 
-    const handleEditName = () => {
-    setIsEditingName(true);
-    const [first = "", last = ""] = userName.split(" ");
-    setNewFirstName(first);
-    setNewLastName(last);
+    const openProfileModal = () => {
+        setIsProfileModalOpen(true);
+        setIsProfileOpen(false);
     };
 
-    const handleSaveName = async () => {
-        const user = auth.currentUser;
-        if (!user) return;
+    const closeProfileModal = () => {
+        setIsProfileModalOpen(false);
+    };
 
+    const handleNameUpdate = async (e: React.FormEvent) => {
+        e.preventDefault();
         try {
-            const userRef = doc(db, "users", user.uid);
-            await updateDoc(userRef, {
-                firstName: newFirstName,
-                lastName: newLastName,
+            await updateDoc(doc(db, "users", userId), {
+                firstName,
+                lastName
             });
-            setUserName(`${newFirstName} ${newLastName}`);
-            setIsEditingName(false);
+            setUserName(`${firstName} ${lastName}`);
+            closeProfileModal();
         } catch (error) {
-            console.error("Error updating name:", error);
+            console.error("Error updating profile:", error);
         }
     };
 
@@ -75,74 +79,121 @@ const Navbar: React.FC = () => {
     };
 
     return (
-        <nav className="fixed top-0 z-50 w-full border-b bg-white border-gray-200 text-black transition-all duration-300">
-            <div className="navbar shadow-sm">
-                <div className="flex-1">
-                    <img src="/bee-hive.png" alt="Logo" className="w-8 h-8 ml-4 mr-4" />
-                    <span className="self-center text-xl font-semibold sm:text-2xl whitespace-nowrap">
-                        HIVEMIND
-                    </span>
-                </div>
-                <div className="flex-none">
-                    <div className="dropdown dropdown-end">
-                        <div
-                            tabIndex={0}
-                            role="button"
-                            className="btn btn-ghost btn-circle avatar"
-                            onClick={toggleProfile}
-                        >
-                            {/* ✅ แสดงตัวอักษรย่อแทนรูปโปร */}
-                            <ProfileImage email={userEmail} />
-                        </div>
+        <>
+            <nav className="fixed top-0 z-50 w-full border-b bg-white border-gray-200 text-black transition-all duration-300">
+                <div className="navbar shadow-sm">
+                    <div className="flex-1">
+                        <img src="/bee-hive.png" alt="Logo" className="w-8 h-8 ml-4 mr-4" />
+                        <span className="self-center text-xl font-semibold sm:text-2xl whitespace-nowrap">
+                            HIVEMIND
+                        </span>
+                    </div>
+                    <div className="flex-none">
+                        <div className="dropdown dropdown-end">
+                            <div
+                                tabIndex={0}
+                                role="button"
+                                className="btn btn-ghost btn-circle avatar"
+                                onClick={toggleProfile}
+                            >
+                                <ProfileImage email={userEmail} />
+                            </div>
 
-                        {isProfileOpen && (
-                            <ul tabIndex={0} className="menu menu-sm dropdown-content rounded-box z-10 mt-3 w-52 p-2 shadow-lg bg-white text-black">
-                                <div className="text-center mb-3">
-                                {isEditingName ? (
-                                    <>
-                                    <input
-                                        className="input input-bordered w-full mb-1 text-sm"
-                                        value={newFirstName}
-                                        onChange={(e) => setNewFirstName(e.target.value)}
-                                        placeholder="First name"
-                                    />
-                                    <input
-                                        className="input input-bordered w-full mb-2 text-sm"
-                                        value={newLastName}
-                                        onChange={(e) => setNewLastName(e.target.value)}
-                                        placeholder="Last name"
-                                    />
-                                    <button className="btn btn-sm btn-primary w-full mb-1" onClick={handleSaveName}>
-                                        {t('save')}
-                                    </button>
-                                    <button className="btn btn-sm w-full" onClick={() => setIsEditingName(false)}>
-                                        {t('cancel')}
-                                    </button>
-                                    </>
-                                ) : (
-                                    <>
-                                    <span className="text-base font-bold">{userName || "Person"}</span>
-                                    <button className="btn btn-sm mt-2 w-full" onClick={handleEditName}>
-                                        {t('edit_name')}
-                                    </button>
-                                    </>
-                                )}
-                                </div>
-                                
-                                <li>
-                                    <button
-                                        onClick={handleLogout}
-                                        className="justify-between text-sm hover:bg-gray-100 rounded-md p-2 w-full text-left"
-                                    >
-                                        {t("logout")}
-                                    </button>
-                                </li>
-                            </ul>
-                        )}
+                            {isProfileOpen && (
+                                <ul tabIndex={0} className="menu menu-sm dropdown-content rounded-box z-10 mt-3 w-52 p-2 shadow-lg bg-white text-black">
+                                    <span className="text-base font-bold text-center mb-3">{userName || "Person"}</span>
+                                    
+                                    <li>
+                                        <button
+                                            onClick={openProfileModal}
+                                            className="justify-between text-sm hover:bg-gray-100 rounded-md p-2 w-full text-left"
+                                        >
+                                            {t("profile")}
+                                        </button>
+                                    </li>
+                                    <li>
+                                        <button
+                                            onClick={handleLogout}
+                                            className="justify-between text-sm hover:bg-gray-100 rounded-md p-2 w-full text-left"
+                                        >
+                                            {t("logout")}
+                                        </button>
+                                    </li>
+                                </ul>
+                            )}
+                        </div>
                     </div>
                 </div>
-            </div>
-        </nav>
+            </nav>
+
+            {/* Profile Modal */}
+            {isProfileModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold">{t('editProfile')}</h3>
+                            <button onClick={closeProfileModal} className="text-gray-500 hover:text-gray-700">
+                                &times;
+                            </button>
+                        </div>
+                        <form onSubmit={handleNameUpdate}>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        {t('firstName')}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={firstName}
+                                        onChange={(e) => setFirstName(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        {t('lastName')}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={lastName}
+                                        onChange={(e) => setLastName(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                     {t('email')}
+                                    </label>
+                                    <input
+                                        type="email"
+                                        value={userEmail}
+                                        disabled
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100"
+                                    />
+                                </div>
+                            </div>
+                            <div className="mt-6 flex justify-end space-x-3">
+                                <button
+                                    type="button"
+                                    onClick={closeProfileModal}
+                                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                                >
+                                    {t('cancel')}
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+                                >
+                                    {t('saveChange')}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+        </>
     );
 };
 

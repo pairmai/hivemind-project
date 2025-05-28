@@ -22,7 +22,7 @@ interface Event {
   start: string | Date;
   allDay: boolean;
   priority?: "High" | "Medium" | "Low";
-  status?: "To Do" | "In Progress" | "Done";
+  status?: "todo" | "inprogress" | "done";
   summary: string;
   description?: string;
   dueDate?: string;
@@ -51,7 +51,7 @@ export default function CalendarPage() {
     allDay: true,
     id: "",
     priority: "Medium",
-    status: "To Do",
+    status: "todo",
     summary: "",
     description: "",
     dueDate: "",
@@ -153,7 +153,7 @@ export default function CalendarPage() {
       allDay: arg.allDay,
       id: new Date().getTime().toString(),
       priority: "Medium",
-      status: "To Do",
+      status: "todo",
       summary: "",
       description: "",
       dueDate: arg.dateStr,
@@ -342,9 +342,9 @@ export default function CalendarPage() {
                         : new Date(event.start).toLocaleDateString()}
                     </p>
                     <p className="text-xs italic">
-                      {event.status === "To Do" && t('to_do')}
-                      {event.status === "In Progress" && t('in_progress')}
-                      {event.status === "Done" && t('done')}
+                      {event.status === "todo" && t('todo')}
+                      {event.status === "inprogress" && t('inprogress')}
+                      {event.status === "done" && t('done')}
                     </p>
                   </li>
                 );
@@ -429,12 +429,12 @@ export default function CalendarPage() {
                     className="w-full border p-2 rounded"
                     value={newEvent.status}
                     onChange={(e) =>
-                      setNewEvent({ ...newEvent, status: e.target.value as "To Do" | "In Progress" | "Done" })
+                      setNewEvent({ ...newEvent, status: e.target.value as "todo" | "inprogress" | "done" })
                     }
                   >
-                    <option value="To Do">{t('to_do')}</option>
-                    <option value="In Progress">{t('doing')}</option>
-                    <option value="Done">{t('done')}</option>
+                    <option value="todo">{t('todo')}</option>
+                    <option value="inprogress">{t('inprogress')}</option>
+                    <option value="done">{t('done')}</option>
                   </select>
                 </div>
               </div>
@@ -509,7 +509,7 @@ export default function CalendarPage() {
             allDay: true,
             id: new Date().getTime().toString(),
             priority: "Medium",
-            status: "To Do",
+            status: "todo",
             summary: "",
             description: "",
             dueDate: todayStr,
@@ -566,7 +566,7 @@ export default function CalendarPage() {
                     <input
                       type="text"
                       className="w-full border p-2 rounded bg-gray-100"
-                      value={selectedEvent.priority}
+                      value={t(`${selectedEvent.priority?.toLowerCase()}`)}
                       disabled
                     />
                   </div>
@@ -576,7 +576,7 @@ export default function CalendarPage() {
                     <input
                       type="text"
                       className="w-full border p-2 rounded bg-gray-100"
-                      value={selectedEvent.status}
+                      value={t(`${selectedEvent.status}`)}
                       disabled
                     />
                   </div>
