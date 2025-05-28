@@ -13,7 +13,7 @@ import { BsRocketTakeoff } from "react-icons/bs";
 import { FaAngleRight } from "react-icons/fa6";
 import { FaAngleDown } from "react-icons/fa6";
 import { db } from "../lib/firebase";
-import { collection, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, arrayUnion, getDocs } from "firebase/firestore";
+import { collection, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, arrayUnion, getDocs, addDoc } from "firebase/firestore";
 import { MoreVertical } from "lucide-react";
 import { getAuth } from "firebase/auth";
 import { query, where } from "firebase/firestore";
@@ -83,6 +83,18 @@ export default function Sidebar() {
                 ownerId: currentUser.uid,
                 collaborators: [currentUser.email],
             });
+
+            // ถ้ามีโน้ตให้เพิ่มเข้าไปใน collection "notes"
+            if (trimmedNote) {
+                await addDoc(collection(db, "notes"), {
+                    title: `Note for ${trimmedName}`,
+                    content: trimmedNote,
+                    date: new Date().toISOString(),
+                    project: projectId,
+                    members: 1,
+                    timestamp: serverTimestamp(),
+                });
+            }
 
             // ส่งอีเมลเชิญ
             for (const email of invitedEmails) {
