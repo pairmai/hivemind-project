@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { auth, db } from "../../lib/firebase";
+import { doc, setDoc } from "firebase/firestore";
+
 
 export default function FocusPage() {
     const router = useRouter();
@@ -17,6 +20,23 @@ export default function FocusPage() {
         );
     };
 
+    const handleBegin = async () => {
+        const user = auth.currentUser;
+        if (!user) return;
+
+        try {
+            await setDoc(doc(db, "focus", user.uid), {
+                selectedFocus: selected,
+                createdAt: new Date(),
+            });
+
+            router.push("/dashboard");
+        } catch (error) {
+            console.error("เกิดข้อผิดพลาดในการบันทึก focus:", error);
+            alert("ไม่สามารถบันทึก focus ได้ กรุณาลองใหม่");
+        }
+    };
+
     return (
         <div className="flex flex-col mt-8 min-h-screen text-center">
             <h1 className="text-3xl font-bold mb-2">{t("mainFocusTitle")}</h1>
@@ -26,7 +46,10 @@ export default function FocusPage() {
                 {["designAndCreativity", "MarketingAndSocialMedia", "education", "it", "business", "personalGrowth", "finance"].map((category) => (
                     <div
                         key={category}
-                        className={`w-full h-[160px] flex flex-col items-center justify-center border p-4 rounded-lg transition-all focus:outline-none focus:ring-3 ${selected.includes(category) ? "border-blue ring-blue" : "border-gray-300"}`}
+                        className={`w-full h-[160px] flex flex-col items-center justify-center border p-4 rounded-lg transition-all focus:outline-none 
+                        ${selected.includes(category)
+                                ? "border-blue bg-blue-100 ring-2 ring-blue shadow-lg"
+                                : "border-gray-300 bg-white hover:bg-gray-100"}`}
                     >
                         <input
                             type="checkbox"
@@ -46,19 +69,19 @@ export default function FocusPage() {
                 ))}
             </div>
             <button
-                onClick={() => router.push("/dashboard")}
+                onClick={handleBegin}
                 disabled={selected.length === 0}
                 className={`mt-8 w-48 py-3 px-6 rounded-lg transition-all mx-auto 
-        ${selected.length === 0
+    ${selected.length === 0
                         ? "bg-gray-400 text-gray-300 cursor-not-allowed"
-                        : "bg-dark-600 text-white hover:bg-dark-700"}`}
+                        : "bg-black text-white hover:bg-gray-700"}`}
             >
                 {t("letsBegin")}
             </button>
 
-            <p className="mt-4 text-center text-dark-600">
+            <p className="mt-4 text-center text-black">
                 {t("explore")}
-                <a href="/dashboard" className="text-dark-600 underline ml-2">{t("skip")}</a>
+                <a href="/dashboard" className="text-black underline ml-2">{t("skip")}</a>
             </p>
 
         </div>

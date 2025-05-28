@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 import { FcGoogle } from "react-icons/fc";
 import { useTranslations } from "next-intl";
-import { auth } from "../../../lib/firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { auth } from "../../lib/firebase";
+import { createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { db } from "../../lib/firebase";
+import { doc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
 
 export default function SignupPage() {
     const router = useRouter();
@@ -20,6 +22,11 @@ export default function SignupPage() {
     const [showPassword, setShowPassword] = useState(false);
     const [confirmPassword, setConfirmPassword] = useState("");
     const [error, setError] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
+    const searchParams = useSearchParams();
+    const projectId = searchParams.get("projectId");
+    const invitedEmail = searchParams.get("email");
 
     const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -29,15 +36,25 @@ export default function SignupPage() {
             return;
         }
 
+        setLoading(true);
         try {
-            //Firebase Auth create account
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
-            console.log("User created:", user);
 
-            //after created redirect to focus page
-            router.push("/focus");
+            await setDoc(doc(db, "users", user.uid), {
+                firstName,
+                lastName,
+                email
+            });
 
+            if (projectId && invitedEmail === email) {
+                const projectRef = doc(db, "projects", projectId);
+                await updateDoc(projectRef, {
+                    collaborators: arrayUnion(email)
+                });
+            }
+
+            router.push(projectId ? "/task-organizer" : "/focus");
         } catch (error: any) {
             console.error(error.message);
             if (error.code === "auth/email-already-in-use") {
@@ -45,16 +62,51 @@ export default function SignupPage() {
             } else {
                 setError("An error occurred while creating your account");
             }
+        } finally {
+            setLoading(false);
         }
     };
 
-    const handleGoogleSignup = () => {
-        console.log("Google Signup Clicked");
+    const handleGoogleSignup = async () => {
+        setGoogleLoading(true);
+        try {
+            const provider = new GoogleAuthProvider();
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
+
+            await setDoc(doc(db, "users", user.uid), {
+                firstName: user.displayName?.split(" ")[0] || "User",
+                lastName: user.displayName?.split(" ")[1] || "",
+                email: user.email
+            });
+
+            if (projectId && invitedEmail === user.email) {
+                const projectRef = doc(db, "projects", projectId);
+                await updateDoc(projectRef, {
+                    collaborators: arrayUnion(user.email)
+                });
+            }
+
+            router.push(projectId ? "/task-organizer" : "/focus");
+        } catch (error: any) {
+            console.error("Google Signup Error:", error);
+            setError(error.message || "Failed to sign up with Google");
+        } finally {
+            setGoogleLoading(false);
+        }
     };
 
     return (
         <div className="flex items-center justify-center min-h-screen bg-gray-100">
             <div className="w-full max-w-sm bg-white p-4 rounded-xl shadow-lg">
+                
+                {googleLoading && (
+                    <div className="fixed inset-0 bg-white bg-opacity-60 flex items-center justify-center z-50">
+                        <div className="loading loading-spinner text-dark-500"></div>
+                        <p className="ml-2 text-dark-500">Signing you up...</p>
+                    </div>
+                )}
+
                 <img src="/bee-hive.png" alt="Logo" width={64} height={64} className="mx-auto" />
                 <h2 className="text-xl font-bold text-center text-gray-800 mt-4">{t("signUp")}</h2>
                 <form className="mt-6" onSubmit={handleSignup}>
@@ -121,14 +173,20 @@ export default function SignupPage() {
 
                     <button
                         type="submit"
-                        className="w-full mt-5 bg-dark-500 text-white p-2 rounded-lg hover:bg-dark-600 text-base">
-                        {t("createacc")}
+                        disabled={loading}
+                        className="w-full mt-5 bg-dark-500 text-white p-2 rounded-lg hover:bg-gray-700 text-base flex items-center justify-center"
+                    >
+                        {loading ? (
+                            <span className="loading loading-spinner loading-sm"></span>
+                        ) : (
+                            t("createacc")
+                        )}
                     </button>
                 </form>
 
-                <p className="mt-4 text-center text-dark-600 text-sm">
+                <p className="mt-4 text-center text-dark-500 text-sm">
                     {t("alreadyacc")}
-                    <a href="/login" className="text-dark-600 underline ml-2">{t("logIn")}</a>
+                    <a href="/login" className="text-dark-500 underline ml-2">{t("logIn")}</a>
                 </p>
 
                 <div className="relative flex items-center my-4">
@@ -140,10 +198,17 @@ export default function SignupPage() {
                 <div className="mt-4 flex justify-center">
                     <button
                         onClick={handleGoogleSignup}
+                        disabled={googleLoading}
                         className="w-full flex items-center justify-center gap-2 border border-dark-100 p-2 rounded-lg hover:bg-gray-100"
                     >
-                        <FcGoogle className="text-xl" />
-                        <span className="text-sm">Sign Up with Google</span>
+                        {googleLoading ? (
+                            <span className="loading loading-spinner loading-sm"></span>
+                        ) : (
+                            <>
+                                <FcGoogle className="text-xl" />
+                                <span className="text-sm">Sign Up with Google</span>
+                            </>
+                        )}
                     </button>
                 </div>
             </div>
