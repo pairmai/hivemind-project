@@ -99,7 +99,7 @@ export default function LoginPage() {
         <div className="flex items-center justify-center min-h-screen bg-gray-100">
             <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-lg">
                 <img src="/bee-hive.png" alt="Logo" width={72} height={72} className="mx-auto" />
-                <h2 className="text-2xl font-bold text-center text-gray-800 mt-4">Welcome Back!</h2>
+                <h2 className="text-2xl font-bold text-center text-gray-800 mt-4">{t("welcome")}</h2>
                 {inviteEmail && (
                     <p className="text-sm text-center text-blue-600 mt-2">
                         You've been invited to collaborate. Please login with {inviteEmail}

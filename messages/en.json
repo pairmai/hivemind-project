@@ -14,6 +14,7 @@
         "donthaveacc": "Don't have an account yet?"
     },
     "login": {
+        "welcome": "Welcome Back!",
         "signUp": "Sign Up",
         "email": "Email Address",
         "password": "Password",
