@@ -13,7 +13,7 @@ import { BsRocketTakeoff } from "react-icons/bs";
 import { FaAngleRight } from "react-icons/fa6";
 import { FaAngleDown } from "react-icons/fa6";
 import { db } from "../lib/firebase";
-import { collection, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, arrayUnion, addDoc } from "firebase/firestore";
+import { collection, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, arrayUnion, getDocs } from "firebase/firestore";
 import { MoreVertical } from "lucide-react";
 import { getAuth } from "firebase/auth";
 import { query, where } from "firebase/firestore";
@@ -57,13 +57,26 @@ export default function Sidebar() {
         }
 
         try {
-            // สร้าง reference ใหม่พร้อม ID อัตโนมัติ
+            // 🔍 Step 0: ตรวจสอบชื่อซ้ำ
+            const nameCheckQuery = query(
+                collection(db, "projects"),
+                where("name", "==", trimmedName),
+                where("ownerId", "==", currentUser.uid) // กรองเฉพาะของเจ้าของนี้
+            );
+
+            const nameCheckSnapshot = await getDocs(nameCheckQuery);
+
+            if (!nameCheckSnapshot.empty) {
+                alert("❌ มีโปรเจกต์ชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่");
+                return;
+            }
+
+            // ✅ Step 1: ไม่มีชื่อซ้ำ → สร้างโปรเจกต์ได้
             const projectRef = doc(collection(db, "projects"));
-            // ใช้ ID ที่สร้างอัตโนมัติ
             const projectId = projectRef.id;
 
             await setDoc(projectRef, {
-                id: projectId, // เก็บ ID ไว้ใน document ด้วย
+                id: projectId,
                 name: trimmedName,
                 createdAt: serverTimestamp(),
                 invitedEmails,
@@ -71,28 +84,18 @@ export default function Sidebar() {
                 collaborators: [currentUser.email],
             });
 
-            // ถ้ามีโน้ตให้เพิ่มเข้าไปใน collection "notes"
-            if (trimmedNote) {
-                await addDoc(collection(db, "notes"), {
-                    title: `Note for ${trimmedName}`,
-                    content: trimmedNote,
-                    date: new Date().toISOString(),
-                    project: projectId,
-                    members: 1,
-                    timestamp: serverTimestamp(),
-                });
-            }
-
+            // ส่งอีเมลเชิญ
             for (const email of invitedEmails) {
                 await sendEmail({
-                    name: projectName,
+                    name: trimmedName,
                     email: email,
-                    projectId: projectId, // ใช้ ID อัตโนมัติ
+                    projectId,
                     inviteEmail: email,
                 });
             }
 
-            setSelectedProject(projectId); // เก็บ ID ที่ใช้อ้างอิง
+            // เคลียร์ค่า state
+            setSelectedProject(projectId);
             setProjectName("");
             setProjectNote("");
             setInvitedEmails([]);
@@ -149,17 +152,34 @@ export default function Sidebar() {
         return () => unsubscribe();
     }, [currentUser]);
 
-    const handleDeleteProject = async (projectToDeleteId: string) => {
+    const handleDeleteProject = async (projectToDeleteId: string, projectName: string) => {
         const confirmDelete = window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบโปรเจคนี้? การลบจะไม่สามารถกู้คืนได้");
         if (!confirmDelete) return;
 
         try {
+            // Step 1: ลบ tasks ที่มี projectName ตรงกัน
+            const tasksQuery = query(
+                collection(db, "tasks"),
+                where("projectName", "==", projectName)
+            );
+
+            const snapshot = await getDocs(tasksQuery);
+            const deletePromises = snapshot.docs.map(taskDoc =>
+                deleteDoc(doc(db, "tasks", taskDoc.id))
+            );
+            await Promise.all(deletePromises);
+            console.log(`ลบ tasks ของโปรเจค "${projectName}" แล้ว`);
+
+            // Step 2: ลบโปรเจค
             await deleteDoc(doc(db, "projects", projectToDeleteId));
             setProjects(prev => prev.filter(p => p.id !== projectToDeleteId));
+            console.log(`ลบโปรเจค "${projectName}" แล้ว`);
+
         } catch (error) {
-            console.error("Error deleting project:", error);
+            console.error("เกิดข้อผิดพลาด:", error);
         }
     };
+
 
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     const [selectedProjectId, setSelectedProjectId] = useState("");
@@ -327,7 +347,7 @@ export default function Sidebar() {
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            handleDeleteProject(project.id);
+                                                            handleDeleteProject(project.id, project.name);
                                                         }}
                                                         className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50"
                                                     >

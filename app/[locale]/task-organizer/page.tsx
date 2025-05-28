@@ -10,6 +10,8 @@ import { collection, onSnapshot, addDoc, query, where, serverTimestamp, deleteDo
 import { useUsers } from "../../context/UserContext";
 import { getAuth } from "firebase/auth";
 import ProfileImage from "@/app/components/ProfileImage";
+import { useTranslations } from "next-intl";
+import { useLocale } from 'next-intl';
 
 
 type Task = {
@@ -51,7 +53,6 @@ const initialData: { columns: Columns } = {
   },
 };
 
-
 export default function TaskOrganizer() {
   const [columns, setColumns] = useState<Columns>(initialData.columns);
   const [searchTerm, setSearchTerm] = useState("");
@@ -87,7 +88,30 @@ export default function TaskOrganizer() {
   const { users } = useUsers();
   const auth = getAuth();
   const currentUser = auth.currentUser;
+  const t = useTranslations('task');
+  const locale = useLocale();
 
+  // Date formatting functions
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString(locale, {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+
+  const formatHeaderDate = () => {
+    const today = new Date();
+    return today.toLocaleDateString(locale, {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+  
   // ดึงข้อมูลโปรเจคจาก Firestore
 
   useEffect(() => {
@@ -442,13 +466,13 @@ export default function TaskOrganizer() {
           {/* Header */}
           <div className="flex items-center mb-4">
             <img src="/Task.png" alt="Logo" width={40} height={40} className="mr-2" />
-            <h2 className="text-lg font-semibold text-left">Task</h2>
+            <h2 className="text-lg font-semibold text-left">{t('task')}</h2>
           </div>
 
           <hr className="border-t border-gray-200 dark:border-gray-600 my-2" />
 
           {/* Project */}
-          <label className="block text-l font-bold text-black">Project</label>
+          <label className="block text-l font-bold text-black">{t('project')}</label>
           <input
             type="text"
             className="w-full border p-2 rounded bg-gray-100"
@@ -457,7 +481,7 @@ export default function TaskOrganizer() {
           />
 
           {/* Summary */}
-          <label className="block text-l font-bold text-black">Summary</label>
+          <label className="block text-l font-bold text-black">{t('summary')}</label>
           <input
             type="text"
             className="w-full border p-2 rounded bg-gray-100"
@@ -468,21 +492,21 @@ export default function TaskOrganizer() {
           {/* Priority */}
           <div className="flex space-x-4">
             <div className="w-1/2">
-              <label className="block text-l font-bold text-black">Priority</label>
+              <label className="block text-l font-bold text-black">{t('priority')}</label>
               <input
                 type="text"
                 className="w-full border p-2 rounded bg-gray-100"
-                value={task.priority}
+                value={t(`${task.priority?.toLowerCase()}`)} 
                 disabled
               />
             </div>
             {/* Status */}
             <div className="w-1/2">
-              <label className="block text-l font-bold text-black">Status</label>
+              <label className="block text-l font-bold text-black">{t('status')}</label>
               <input
                 type="text"
                 className="w-full border p-2 rounded bg-gray-100"
-                value={columnName}
+                value={t(`${task.status}`)} 
                 disabled
               />
             </div>
@@ -490,7 +514,7 @@ export default function TaskOrganizer() {
 
 
           {/* Assignee */}
-          <label className="block text-l font-bold text-black">Assignee</label>
+          <label className="block text-l font-bold text-black">{t('assignee')}</label>
           <input
             type="text"
             className="w-full border p-2 rounded bg-gray-100"
@@ -499,7 +523,7 @@ export default function TaskOrganizer() {
           />
 
           {/* Description */}
-          <label className="block text-l font-bold text-black">Description</label>
+          <label className="block text-l font-bold text-black">{t('description')}</label>
           <textarea
             className="w-full border p-2 rounded bg-gray-100"
             value={task.description}
@@ -507,7 +531,7 @@ export default function TaskOrganizer() {
           />
 
           {/*Assign by*/}
-          <label className="block text-l font-bold text-black">Reporter</label>
+          <label className="block text-l font-bold text-black">{t('reporter')}</label>
           <input
             type="text"
             className="w-full border p-2 rounded bg-gray-100"
@@ -517,16 +541,11 @@ export default function TaskOrganizer() {
 
           {/* Due Date */}
           <div>
-            <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-1">Due Date</h4>
+            <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('dueDate')}</h4>
             <p className="text-gray-600 dark:text-gray-400">
               {task.dueDate
-                ? new Date(task.dueDate).toLocaleDateString("en-GB", {
-                  weekday: 'short',
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric'
-                })
-                : "No due date"}
+                ? formatDate(task.dueDate)
+                : t('noDueDate')}  
             </p>
           </div>
 
@@ -536,14 +555,14 @@ export default function TaskOrganizer() {
               onClick={() => handleDeleteTask(task.id, columnId)}
               className="button-delete"
             >
-              Delete
+              {t('delete')}
             </button>
 
             <button
               onClick={() => startEditing(task)}
               className="button-edit"
             >
-              Edit
+              {t('edit')}
             </button>
 
             <button
@@ -551,7 +570,7 @@ export default function TaskOrganizer() {
               onClick={() => setExpandedTaskId(null)}
               className="button-cancel"
             >
-              Cancel
+              {t('cancel')}
             </button>
 
           </div>
@@ -638,7 +657,7 @@ export default function TaskOrganizer() {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex justify-between items-start mb-4">
-            <h3 className="text-xl font-bold dark:text-white">Edit Task</h3>
+            <h3 className="text-xl font-bold dark:text-white">{t('editTask')}</h3>
             <button
               onClick={() => setEditingTaskId(null)}
               className="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
@@ -648,13 +667,13 @@ export default function TaskOrganizer() {
           </div>
 
           <div>
-            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Project</label>
+            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">{t('project')}</label>
             <select
               value={project}
               onChange={handleProjectChange}
               className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
             >
-              <option value="" disabled>Select project</option>
+              <option value="" disabled>{t('selectProject')}</option>
               {projects.map((project) => (
                 <option key={project.name} value={project.name}>
                   {project.name}
@@ -664,7 +683,7 @@ export default function TaskOrganizer() {
           </div>
 
           <div>
-            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Summary</label>
+            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">{t('summary')}</label>
             <input
               type="text"
               value={summary}
@@ -674,7 +693,7 @@ export default function TaskOrganizer() {
           </div>
 
           <div>
-            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">{t('description')}</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -685,20 +704,20 @@ export default function TaskOrganizer() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Priority</label>
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">{t('priority')}</label>
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value)}
                 className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
               >
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
+                <option value="Low">{t('low')}</option>
+                <option value="Medium">{t('medium')}</option>
+                <option value="High">{t('high')}</option>
               </select>
             </div>
 
             <div>
-              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Assignee</label>
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">{t('assignee')}</label>
               <select
                 value={assignee}
                 onChange={(e) => setAssignee(e.target.value)}
@@ -729,7 +748,7 @@ export default function TaskOrganizer() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">{t('dueDate')}</label>
               <input
                 type="date"
                 value={dueDate}
@@ -740,7 +759,7 @@ export default function TaskOrganizer() {
             </div>
 
             <div>
-              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Reporter</label>
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">{t('reporter')}</label>
               <input
                 type="text"
                 value={reporterName}
@@ -755,13 +774,13 @@ export default function TaskOrganizer() {
               onClick={() => setEditingTaskId(null)}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
             >
-              Cancel
+              {t('cancel')}
             </button>
             <button
               onClick={handleSave}
               className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-black rounded hover:bg-blue-600"
             >
-              <FaSave /> Save Changes
+              <FaSave /> {t('saveChange')}
             </button>
           </div>
         </div>
@@ -774,7 +793,8 @@ export default function TaskOrganizer() {
     <div>
       <main>
         <header className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold">Task Organizer</h2>
+          <h2 className="text-2xl font-bold">{t('title')}
+</h2>
         </header>
 
         {/* Search Input */}
@@ -782,7 +802,7 @@ export default function TaskOrganizer() {
           <FaSearch className="absolute left-3 text-gray-500 dark:text-gray-400" />
           <input
             type="text"
-            placeholder="Looking for something? Start typing..."
+            placeholder={t('searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full sm:w-[1000px] pl-[40px] p-2 rounded-md bg-[#f4f4f4]"
@@ -793,37 +813,36 @@ export default function TaskOrganizer() {
         <div className="mb-4 relative flex items-center justify-between rounded-lg bg-white border border-gray-200 p-4 h-16 w-full">
           {/* แสดงเดือนและวันที่ */}
           <div className="flex flex-col items-start justify-center">
-            <span className="text-2xl">{`${new Date().toLocaleString('en-US', { weekday: 'long' })}, ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}</span> {/* วันที่ตัวเล็ก */}
+            <span className="text-2xl">{formatHeaderDate()}</span> {/* วันที่ตัวเล็ก */}
           </div>
 
           <button className="today-bar px-4 py-1 rounded-xl text-lg ml-4">
-            TODAY
+            {t('today')}
           </button>
 
           <div className="flex-grow flex ml-10 items-center gap-4"> {/* ทำให้ title และปุ่ม prior อยู่กลาง */}
             <div className="border-l-2 border-gray-300 h-10 mx-4" /> {/* เส้น | */}
 
-            <span className="font-bold text-xl">Board -</span>
+            <span className="font-bold text-xl">{t('board')}</span>
 
             <div className="flex gap-2">
               <button className={`all-butt px-4 py-1 rounded-xl ${priorityFilter === "all" ? "active" : ""}`}
                 onClick={() => setPriorityFilter("all")}>
-                ALL
+                {t('all')}
               </button>
 
               <button className={`high-prior px-4 py-1 rounded-xl ${priorityFilter === "High" ? "active" : ""}`}
                 onClick={() => setPriorityFilter("High")}>
-                High
+                {t('high')}
               </button>
-
               <button className={`medium-prior px-4 py-1 rounded-xl ${priorityFilter === "Medium" ? "active" : ""}`}
                 onClick={() => setPriorityFilter("Medium")}>
-                Medium
+                {t('medium')}
               </button>
 
               <button className={`low-prior px-4 py-1 rounded-xl ${priorityFilter === "Low" ? "active" : ""}`}
                 onClick={() => setPriorityFilter("Low")}>
-                Low
+                {t('low')}
               </button>
             </div>
           </div>
@@ -832,7 +851,7 @@ export default function TaskOrganizer() {
             <button className="creat-task"
               onClick={() => setShowModal(true)}
             >
-              + Create Task
+              {t('createTask+')}
             </button>
           </div>
         </div>
@@ -855,14 +874,14 @@ export default function TaskOrganizer() {
 
                 <div className="flex items-center mb-4">
                   <img src="/Task.png" alt="Logo" width={40} height={40} className="mr-2" />
-                  <h2 className="text-lg font-semibold text-left"> Create Task</h2>
+                  <h2 className="text-lg font-semibold text-left">{t('createTask')}</h2>
                 </div>
 
                 <hr className="border-t border-gray-200 dark:border-gray-600 my-2 mb-4" />
 
                 {/*project create*/}
                 <label className="block text-lg font-bold text-black mb-4">
-                  Project<span className="text-[#ff0000]">*</span>
+                  {t('project')}<span className="text-[#ff0000]">*</span>
                 </label>
 
                 <select
@@ -871,7 +890,7 @@ export default function TaskOrganizer() {
                   className="w-full border border-gray-300 rounded p-2 mb-4"
                 >
                   <option value="" disabled>
-                    Select project
+                    {t('selectProject')}
                   </option>
                   {projects.map((project) => (
                     <option key={project.name} value={project.name}>
@@ -883,47 +902,47 @@ export default function TaskOrganizer() {
                 {/*Summary*/}
                 <div>
                   <label className="block text-l font-bold text-black">
-                    Summary<span className="text-[#ff0000]">*</span></label>
+                    {t('summary')}<span className="text-[#ff0000]">*</span></label>
                   <input
                     type="text"
                     value={modalSummary}
                     onChange={(e) => setModalSummary(e.target.value)}
                     className="w-full border p-2 rounded"
-                    placeholder="Add summary"
+                    placeholder={t('addSummary')}
                   />
                 </div>
 
                 {/*priority & status*/}
                 <div className="flex space-x-4 mb-4">
                   <div className="w-1/2">
-                    <label className="block text-l font-bold text-black">Priority</label>
+                    <label className="block text-l font-bold text-black">{t('priority')}</label>
                     <select
                       value={modalPriority}
                       onChange={(e) => setModalPriority(e.target.value)}
                       className="w-full border p-2 rounded"
                     >
-                      <option value="High">High</option>
-                      <option value="Medium">Medium</option>
-                      <option value="Low">Low</option>
+                      <option value="High">{t('high')}</option>
+                      <option value="Medium">{t('medium')}</option>
+                      <option value="Low">{t('low')}</option>
                     </select>
                   </div>
 
                   <div className="w-1/2">
-                    <label className="block text-l font-bold text-black">Status</label>
+                    <label className="block text-l font-bold text-black">{t('status')}</label>
                     <select
                       value={modalStatus}
                       onChange={(e) => setModalStatus(e.target.value)}
                       className="w-full border p-2 rounded"
                     >
-                      <option value="todo">TO DO</option>
-                      <option value="inprogress">DOING</option>
-                      <option value="done">DONE</option>
+                      <option value="todo">{t('todo')}</option>
+                      <option value="inprogress">{t('inprogress')}</option>
+                      <option value="done">{t('done')}</option>
                     </select>
                   </div>
                 </div>
 
                 {/* Assignee */}
-                <span className="block text-lg font-bold text-black">Assign to:</span>
+                <span className="block text-lg font-bold text-black">{t('assignTo')}</span>
                 <div className="mb-4 relative flex items-center">
                   <select
                     value={modalAssignee}
@@ -932,7 +951,7 @@ export default function TaskOrganizer() {
                     disabled={!selectedProject}
                   >
                     <option value="" disabled hidden>
-                      Select member
+                      {t('selectMember')}
                     </option>
                     {getAssigneesForSelectedProject().map(({ email, name }) => (
                       <option key={email} value={email}>
@@ -943,17 +962,17 @@ export default function TaskOrganizer() {
                 </div>
 
                 {/* Description */}
-                <label className="block text-lg font-bold text-black">Description</label>
+                <label className="block text-lg font-bold text-black">{t('description')}</label>
                 <textarea
                   className="w-full border p-2 rounded mb-4"
-                  placeholder="Add more context..."
+                  placeholder={t('addDescription')}
                   value={modalDescription}
                   onChange={(e) => setModalDescription(e.target.value)}
                 />
 
 
                 {/* Date */}
-                <label className="block text-lg font-bold text-black mb-4">Date</label>
+                <label className="block text-lg font-bold text-black mb-4">{t('dueDate')}</label>
                 <input
                   type="date"
                   value={dueDate}
@@ -967,14 +986,14 @@ export default function TaskOrganizer() {
                   className="button-create mb-4"
                   onClick={handleCreateTaskFromModal}
                 >
-                  Create
+                  {t('create')}
                 </button>
 
                 <button
                   className="button-cancel"
                   onClick={() => setShowModal(false)}
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
               </div>
             </div>
@@ -1047,7 +1066,7 @@ export default function TaskOrganizer() {
                           className="project-card w-full"
                         >
                           <option value="" disabled hidden className="select-project">
-                            select project
+                            {t('selectProject')}
                           </option>
                           {projects.map((project) => (
                             <option key={project.name} value={project.name}>
@@ -1060,7 +1079,7 @@ export default function TaskOrganizer() {
                         <div className="relative flex items-center pl-2 mb-4"> {/* เพิ่ม mb-4 เพื่อแยกบรรทัด */}
                           <FaClipboardList className="text-gray-500 text-l mr-2 icon" />
                           <input
-                            placeholder="Add summary"
+                            placeholder={t('addSummary')}
                             value={newTaskSummaries[colId] || ""}
                             onChange={(e) =>
                               setNewTaskSummaries((prev) => ({
@@ -1112,14 +1131,14 @@ export default function TaskOrganizer() {
                             }
                             className="w-full p-2 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
                           >
-                            <option value="Low">Low</option>
-                            <option value="Medium">Medium</option>
-                            <option value="High">High</option>
+                            <option value="Low">{t('low')}</option>
+                            <option value="Medium">{t('medium')}</option>
+                            <option value="High">{t('high')}</option>
                           </select>
                         </div>
 
                         {/* assignee */}
-                        <span className="relative items-center pl-2 mb-4 border-gray-600">Assign to:</span>
+                        <span className="relative items-center pl-2 mb-4 border-gray-600">{t('assignTo')}</span>
                         <div className="mb-4 relative flex items-center pl-1">
                           <select
                             value={newTaskAssignedUser[colId] || ""}
@@ -1133,7 +1152,7 @@ export default function TaskOrganizer() {
                             disabled={!selectedProject}
                           >
                             <option value="" disabled hidden>
-                              Select member
+                              {t('selectMember')}
                             </option>
                             {getAssigneesForSelectedProject().map(({ email, name }) => (
                               <option key={email} value={email}>
@@ -1146,9 +1165,9 @@ export default function TaskOrganizer() {
 
                         {/* Description */}
                         <div className="relative items-center pl-2 mb-4 border-gray-600">
-                          <div> Description </div>
+                          <div> {t('description')} </div>
                           <textarea
-                            placeholder=" Add more context..."
+                            placeholder={t('addDescription')}
                             value={newTaskDescription[colId] || ""}
                             onChange={(e) =>
                               setNewTaskDescription((prev) => ({
@@ -1173,13 +1192,13 @@ export default function TaskOrganizer() {
                             onClick={() => setAddingTaskCol(null)}
                             className="text-sm text-gray-500 hover:text-gray-700"
                           >
-                            Cancel
+                            {t('cancel')}
                           </button>
                           <button
                             onClick={() => addTask(colId)}
                             className="bg-blue-500 text-black px-3 py-1 rounded text-sm"
                           >
-                            Add
+                            {t('add')}
                           </button>
                         </div>
                       </div>
@@ -1218,7 +1237,7 @@ export default function TaskOrganizer() {
                                 {item.assignee && (
                                   <div className="flex items-center gap-2 justify-between">
                                     <div className="text-sm font-semibold text-gray-600 dark:text-gray-300">
-                                      Assignee:
+                                      {t('assignee')}
                                     </div>
                                     <ProfileImage email={item.assignee} />
                                   </div>
@@ -1232,11 +1251,7 @@ export default function TaskOrganizer() {
                                     <CgFlagAlt className="text-lg justify-start text-gray-600" />
                                     {item.dueDate && (
                                       <p className="text-sm text-gray-600">
-                                        {new Date(item.dueDate).toLocaleDateString("en-GB", {
-                                          day: "2-digit",
-                                          month: "short",
-                                          year: "numeric",
-                                        })}
+                                        {formatDate(item.dueDate)}
                                       </p>
                                     )}
                                     <span
@@ -1247,7 +1262,7 @@ export default function TaskOrganizer() {
                                       ${item.priority === "Low" && "low-prior"}
                                     `}
                                     >
-                                      {item.priority}
+                                      {t(`${item.priority?.toLowerCase()}`)}
                                     </span>
                                   </div>
                                 </>
